@@ -1,0 +1,36 @@
+{
+  "name": "mayan",
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "author": "",
+  "description": "The core package for the Connect SDK, used in conjunction with 1 or more of the chain packages",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "wormhole",
+    "sdk",
+    "typescript",
+    "connect"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build:cjs": "tsc -p ./tsconfig.cjs.json",
+    "build:esm": "tsc -p ./tsconfig.esm.json",
+    "build": "npm run build:cjs && npm run build:esm",
+    "docs": "typedoc"
+  },
+  "dependencies": {
+    "axios": "^1.4.0",
+    "@wormhole-foundation/connect-sdk": "github:wormhole-foundation/connect-sdk#route-interface",
+    "@wormhole-foundation/connect-sdk-evm": "github:wormhole-foundation/connect-sdk#route-interface",
+    "@wormhole-foundation/connect-sdk-solana": "github:wormhole-foundation/connect-sdk#route-interface",
+    "@mayanfinance/swap-sdk":"^4.5.1"
+  }
+}

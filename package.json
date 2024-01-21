@@ -1,0 +1,22 @@
+{
+  "name": "wormhole-routes",
+  "version": "1.0.0",
+  "author": "",
+  "description": "Wormhole Routes",
+  "main": "index.js",
+  "scripts": {
+    "build":"npm run build --workspaces --if-present"
+  },
+  "keywords": [],
+  "workspaces": [
+    "mayan"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "@wormhole-foundation/connect-sdk": "github:wormhole-foundation/connect-sdk#route-interface"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "typescript": "^5.3.3"
+  }
+}
