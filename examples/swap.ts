@@ -1,0 +1,119 @@
+import {
+  AttestationReceipt,
+  ProtocolName,
+  TransferReceipt,
+  TransferState,
+  Wormhole,
+  routes,
+} from "@wormhole-foundation/connect-sdk";
+import { EvmPlatform } from "@wormhole-foundation/connect-sdk-evm";
+import { SolanaPlatform } from "@wormhole-foundation/connect-sdk-solana";
+import { MayanRoute } from "../src/index";
+
+import { getStuff } from "./utils";
+
+(async function () {
+  // Setup
+  const wh = new Wormhole("Mainnet", [EvmPlatform, SolanaPlatform]);
+
+  const sendChain = wh.getChain("Ethereum");
+  const destChain = wh.getChain("Solana");
+
+  // Pull private keys from env for testing purposes
+  const sender = await getStuff(sendChain);
+  const receiver = await getStuff(destChain);
+
+  console.log(sender);
+  console.log(receiver);
+
+  // Doing transaction of native ETH on Ethereum to native SOL on Solana
+  const source = Wormhole.tokenId(sendChain.chain, "native");
+  const destination = Wormhole.tokenId(destChain.chain, "native");
+
+  // Create a new Wormhole route resolver, adding the Mayan route to the default list
+  const resolver = wh.resolver([MayanRoute]);
+
+  // Creating a transfer request fetches token details
+  // since all routes will need to know about the tokens
+  const tr = await routes.RouteTransferRequest.create(wh, {
+    from: Wormhole.chainAddress(
+      sendChain.chain,
+      sender.address.address.toString()
+    ),
+    to: Wormhole.chainAddress(
+      destChain.chain,
+      receiver.address.address.toString()
+    ),
+    source,
+    destination,
+  });
+
+  // resolve the transfer request to a set of routes that can perform it
+  const foundRoutes = await resolver.findRoutes(tr);
+  console.log(
+    "For the transfer parameters, we found these routes: ",
+    foundRoutes
+  );
+
+  // Sort the routes given some input (not required for mvp)
+  // const bestRoute = (await resolver.sortRoutes(foundRoutes, "cost"))[0]!;
+  //const bestRoute = foundRoutes.filter((route) => routes.isAutomatic(route))[0]!;
+  const bestRoute = foundRoutes[0]!;
+
+  // Specify the amount as a decimal string
+  const transferParams = {
+    amount: "0.015",
+    options: bestRoute.getDefaultOptions(),
+  };
+
+  let validated = await bestRoute.validate(transferParams);
+  if (!validated.valid) {
+    console.error(validated.error);
+    return;
+  }
+  console.log("Validated: ", validated);
+
+  try {
+    const quote = await bestRoute.quote(validated.params);
+    console.log("Quote: ", quote);
+  } catch (e) {
+    console.log("Error fetching quote: ", e);
+  }
+
+  // initiate the transfer
+  const receipt = await bestRoute.initiate(sender.signer, validated.params);
+  console.log("Initiated transfer with receipt: ", receipt);
+
+  // track the transfer until the destination is initiated
+  const checkAndComplete = async (
+    receipt: TransferReceipt<AttestationReceipt<ProtocolName>>
+  ) => {
+    console.log("Checking transfer state...");
+    // overwrite receipt var
+    for await (receipt of bestRoute.track(receipt, 120 * 1000)) {
+      console.log("Transfer State:", TransferState[receipt.state]);
+    }
+
+    // gucci
+    if (receipt.state >= TransferState.DestinationFinalized) return;
+
+    // if the route is one we need to complete, do it
+    if (receipt.state === TransferState.Attested) {
+      if (routes.isManual(bestRoute)) {
+        const completedTxids = await bestRoute.complete(
+          receiver.signer,
+          receipt
+        );
+        console.log("Completed transfer with txids: ", completedTxids);
+        return;
+      }
+    }
+
+    // give it time to breath and try again
+    const wait = 2 * 1000;
+    console.log(`Transfer not complete, trying again in a ${wait}ms...`);
+    setTimeout(() => checkAndComplete(receipt), wait);
+  };
+
+  await checkAndComplete(receipt);
+})();

@@ -1,22 +1,45 @@
 {
-  "name": "wormhole-routes",
-  "version": "1.0.0",
+  "name": "@mayanfinance/wormhole-sdk-route",
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
   "author": "",
-  "description": "Wormhole Routes",
-  "main": "index.js",
-  "scripts": {
-    "build":"npm run build --workspaces --if-present"
-  },
-  "keywords": [],
-  "workspaces": [
-    "mayan"
+  "description": "The core package for the Connect SDK, used in conjunction with 1 or more of the chain packages",
+  "files": [
+    "dist"
   ],
-  "license": "ISC",
+  "keywords": [
+    "wormhole",
+    "sdk",
+    "typescript",
+    "connect"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build:cjs": "tsc -p ./tsconfig.cjs.json",
+    "build:esm": "tsc -p ./tsconfig.esm.json",
+    "build": "npm run build:cjs && npm run build:esm",
+    "docs": "typedoc",
+    "example:swap": "tsx examples/swap.ts"
+  },
   "dependencies": {
-    "@wormhole-foundation/connect-sdk": "github:wormhole-foundation/connect-sdk#route-interface"
+    "@solana/web3.js": "^1.89.1",
+    "@mayanfinance/swap-sdk": "file:../swap-sdk",
+    "@wormhole-foundation/connect-sdk": "0.4.0-beta.2",
+    "@wormhole-foundation/connect-sdk-evm": "0.4.0-beta.2",
+    "@wormhole-foundation/connect-sdk-solana": "0.4.0-beta.2",
+    "axios": "^1.4.0",
+    "ethers": "^6"
   },
   "devDependencies": {
-    "@types/node": "^20.11.5",
+    "@types/node": "^20.11.6",
+    "dotenv": "^16.4.0",
+    "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }
 }

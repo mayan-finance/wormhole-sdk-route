@@ -1,15 +1,22 @@
-import { ChainName, SolanaTransactionSigner } from "@mayanfinance/swap-sdk";
+import {
+  ChainName as MayanChainName,
+  SolanaTransactionSigner,
+  fetchTokenList,
+  Token as MayanToken,
+} from "@mayanfinance/swap-sdk";
 import { ethers } from "ethers";
 import { Transaction } from "@solana/web3.js";
 import {
   Chain,
-  Network,
+  TokenId,
+  isSignOnlySigner,
   Signer,
   TransactionId,
-  isSignOnlySigner,
+  toNative,
+  nativeTokenId,
 } from "@wormhole-foundation/connect-sdk";
+import { isEvmNativeSigner } from "@wormhole-foundation/connect-sdk-evm";
 import { SolanaUnsignedTransaction } from "@wormhole-foundation/connect-sdk-solana";
-import { testing } from "@wormhole-foundation/connect-sdk-evm";
 import axios from "axios";
 
 export const NATIVE_CONTRACT_ADDRESS =
@@ -23,12 +30,41 @@ const chainNameMap = {
   Avalanche: "avalanche",
   Arbitrum: "arbitrum",
   Aptos: "aptos",
-} as Record<Chain, ChainName>;
+} as Record<Chain, MayanChainName>;
 
-export const toMayanChainName = (chain: Chain) => {
+export function toMayanChainName(chain: Chain): MayanChainName {
   if (!chainNameMap[chain]) throw new Error(`Chain ${chain} not supported`);
-  return chainNameMap[chain] as ChainName;
-};
+  return chainNameMap[chain] as MayanChainName;
+}
+
+export function supportedChains(): Chain[] {
+  return Object.keys(chainNameMap) as Chain[];
+}
+
+let tokenListCache = {} as Record<Chain, TokenId[]>;
+
+export async function fetchTokensForChain(chain: Chain): Promise<TokenId[]> {
+  if (chain in tokenListCache) {
+    return tokenListCache[chain] as TokenId[];
+  }
+
+  const mayanTokens: MayanToken[] = await fetchTokenList(
+    toMayanChainName(chain)
+  );
+  const whTokens: TokenId[] = mayanTokens.map((mt: MayanToken): TokenId => {
+    if (mt.contract === NATIVE_CONTRACT_ADDRESS) {
+      return nativeTokenId(chain);
+    } else {
+      return {
+        chain,
+        address: toNative(chain, mt.contract),
+      } as TokenId;
+    }
+  });
+
+  tokenListCache[chain] = whTokens;
+  return whTokens;
+}
 
 export function mayanSolanaSigner(signer: Signer): SolanaTransactionSigner {
   if (!isSignOnlySigner(signer))
@@ -48,11 +84,10 @@ export function mayanSolanaSigner(signer: Signer): SolanaTransactionSigner {
 }
 
 export function mayanEvmSigner(signer: Signer): ethers.Signer {
-  if (!isSignOnlySigner(signer))
-    throw new Error("Signer must be a SignOnlySigner");
-  const w = (signer as testing.EvmSigner<Network>)._wallet;
-  // @ts-ignore
-  return w as ethers.Signer;
+  if (isEvmNativeSigner(signer))
+    return signer.unwrap() as unknown as ethers.Signer;
+
+  throw new Error("Signer must be an EvmNativeSigner");
 }
 
 export enum MayanTransactionStatus {

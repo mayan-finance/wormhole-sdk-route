@@ -1,5 +1,15 @@
-Wormhole Routes
----------------
+# Mayan Swap Route
 
+## Setup
 
-Implementations of Routes using the Wormhole Router
+(Temporary)
+
+```
+npm link @mayanfinance/swap-sdk @wormhole-foundation/connect-sdk @wormhole-foundation/connect-sdk-evm @wormhole-foundation/connect-sdk-solana
+```
+
+Build:
+
+```
+npm run build
+```

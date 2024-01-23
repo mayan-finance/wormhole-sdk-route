@@ -2,27 +2,30 @@ import {
   Quote as MayanQuote,
   Token,
   fetchQuote,
-  fetchTokenList,
   swapFromEvm,
   swapFromSolana,
 } from "@mayanfinance/swap-sdk";
 import {
+  Chain,
+  ChainContext,
   Network,
   Signer,
   SourceInitiatedTransferReceipt,
-  TransferQuote,
+  TokenId,
   TransferState,
   Wormhole,
   canonicalAddress,
+  isNative,
   isSourceInitiated,
-  isTokenId,
   routes,
 } from "@wormhole-foundation/connect-sdk";
 import {
   NATIVE_CONTRACT_ADDRESS,
+  fetchTokensForChain,
   getTransactionStatus,
   mayanEvmSigner,
   mayanSolanaSigner,
+  supportedChains,
   toMayanChainName,
 } from "./utils";
 
@@ -33,19 +36,15 @@ export namespace MayanRoute {
     deadlineInSeconds: number;
   };
   export type NormalizedParams = {
-    amount: bigint;
-    //
+    amount: string;
   };
-  export interface ValidatedParams extends routes.ValidatedTransferParams<Options> {
+  export interface ValidatedParams
+    extends routes.ValidatedTransferParams<Options> {
     normalizedParams: NormalizedParams;
-  }
-
-  export interface Quote extends TransferQuote {
-    quote: MayanQuote;
   }
 }
 
-type Q = MayanRoute.Quote;
+type Q = routes.Quote;
 type Op = MayanRoute.Options;
 type Vp = MayanRoute.ValidatedParams;
 type R = routes.Receipt;
@@ -53,48 +52,52 @@ type R = routes.Receipt;
 type Tp = routes.TransferParams<Op>;
 type Vr = routes.ValidationResult<Op>;
 
-export class MayanRoute<N extends Network> extends routes.AutomaticRoute<N, Op, R, Q> {
+export class MayanRoute<N extends Network>
+  extends routes.AutomaticRoute<N, Op, R, Q>
+  implements routes.StaticRouteMethods<typeof MayanRoute>
+{
   MIN_DEADLINE = 60;
-  MAX_SLIPPAGE = 100;
+  MAX_SLIPPAGE = 1;
 
   NATIVE_GAS_DROPOFF_SUPPORTED = true;
   tokenList?: Token[];
 
+  static meta = {
+    name: "MayanSwap",
+  };
+
   getDefaultOptions(): Op {
-    return { gasDrop: 0, slippage: 3, deadlineInSeconds: 60 * 10 };
+    return { gasDrop: 0, slippage: 0.05, deadlineInSeconds: 60 * 10 };
   }
 
-  async isSupported(): Promise<boolean> {
-    try {
-      toMayanChainName(this.request.fromChain.chain);
-      toMayanChainName(this.request.toChain.chain);
-      return true;
-    } catch {
-      return false;
-    }
+  static supportedNetworks(): Network[] {
+    return ["Mainnet"];
+  }
+
+  static supportedChains(_: Network): Chain[] {
+    return supportedChains();
+  }
+
+  static async supportedSourceTokens(
+    fromChain: ChainContext<Network>
+  ): Promise<TokenId[]> {
+    return fetchTokensForChain(fromChain.chain);
+  }
+
+  static isProtocolSupported(chain: ChainContext<Network>): boolean {
+    return supportedChains().includes(chain.chain);
+  }
+
+  static supportedDestinationTokens<N extends Network>(
+    _token: TokenId,
+    _fromChain: ChainContext<N>,
+    toChain: ChainContext<N>
+  ): Promise<TokenId[]> {
+    return fetchTokensForChain(toChain.chain);
   }
 
   async isAvailable(): Promise<boolean> {
-    // assume native is always available
-    const sourceToken = this.request.source;
-    if (sourceToken.id === "native") return true;
-
-    try {
-      this.tokenList =
-        this.tokenList ?? (await fetchTokenList(toMayanChainName(this.request.fromChain.chain)));
-
-      const tokenAddress = canonicalAddress(sourceToken.id);
-
-      const found = this.tokenList.find(
-        (token) => token.contract === tokenAddress || token.mint === tokenAddress,
-      );
-
-      if (!found) throw new Error("Could not find token in token list");
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
-
+    // No way to check relayer availability so assume true
     return true;
   }
 
@@ -113,44 +116,54 @@ export class MayanRoute<N extends Network> extends routes.AutomaticRoute<N, Op, 
     }
   }
 
-  async quote(params: Vp) {
-    const { source, destination, from, to } = this.request;
+  private destTokenAddress(): string {
+    const { destination } = this.request;
+    return destination && !isNative(destination.id.address)
+      ? canonicalAddress(destination.id)
+      : NATIVE_CONTRACT_ADDRESS;
+  }
 
-    const sourceTokenAddress = isTokenId(source.id)
+  private sourceTokenAddress(): string {
+    const { source } = this.request;
+    return !isNative(source.id.address)
       ? canonicalAddress(source.id)
       : NATIVE_CONTRACT_ADDRESS;
+  }
 
-    const destTokenAddress =
-      destination && isTokenId(destination.id)
-        ? canonicalAddress(destination.id)
-        : NATIVE_CONTRACT_ADDRESS;
+  private async fetchQuote(params: Vp): Promise<MayanQuote> {
+    const { from, to } = this.request;
 
     const quoteOpts = {
       amount: Number(params.amount),
-      fromToken: sourceTokenAddress,
-      toToken: destTokenAddress,
+      fromToken: this.sourceTokenAddress(),
+      toToken: this.destTokenAddress(),
       fromChain: toMayanChainName(from.chain),
       toChain: toMayanChainName(to.chain),
       ...params.options,
+      ...this.getDefaultOptions(),
     };
 
-    const q = await fetchQuote(quoteOpts);
-    // TODO: use more from q
+    return await fetchQuote(quoteOpts);
+  }
+
+  async quote(params: Vp) {
+    const { from, to } = this.request;
+    const quote = await this.fetchQuote(params);
+
     const fullQuote: Q = {
       sourceToken: {
-        token: Wormhole.chainAddress(from.chain, sourceTokenAddress),
-        amount: params.normalizedParams.amount,
+        token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
+        amount: quote.effectiveAmountIn.toString(),
       },
       destinationToken: {
-        token: Wormhole.chainAddress(from.chain, destTokenAddress),
-        amount: BigInt(q.expectedAmountOut),
+        token: Wormhole.tokenId(to.chain, this.destTokenAddress()),
+        amount: quote.expectedAmountOut.toString(),
       },
       relayFee: {
-        token: Wormhole.chainAddress(from.chain, sourceTokenAddress),
-        amount: BigInt(q.redeemRelayerFee),
+        token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
+        amount: quote.redeemRelayerFee.toString(),
       },
-      destinationNativeGas: BigInt(q.gasDrop),
-      quote: q,
+      destinationNativeGas: quote.gasDrop.toString(),
     };
     return fullQuote;
   }
@@ -160,7 +173,7 @@ export class MayanRoute<N extends Network> extends routes.AutomaticRoute<N, Op, 
     const destinationAddress = canonicalAddress(this.request.to);
 
     try {
-      const { quote } = await this.quote(params);
+      const quote = await this.fetchQuote(params);
 
       const rpc = await this.request.fromChain.getRpc();
       let txhash: string;
@@ -172,7 +185,7 @@ export class MayanRoute<N extends Network> extends routes.AutomaticRoute<N, Op, 
           params.options.deadlineInSeconds,
           undefined,
           mayanSolanaSigner(signer),
-          rpc,
+          rpc
         );
       } else {
         const txres = await swapFromEvm(
@@ -180,8 +193,7 @@ export class MayanRoute<N extends Network> extends routes.AutomaticRoute<N, Op, 
           destinationAddress,
           params.options.deadlineInSeconds,
           undefined,
-          rpc,
-          mayanEvmSigner(signer),
+          mayanEvmSigner(signer)
         );
 
         txhash = txres.hash;
@@ -203,7 +215,9 @@ export class MayanRoute<N extends Network> extends routes.AutomaticRoute<N, Op, 
 
   public override async *track(receipt: R, timeout?: number) {
     if (!isSourceInitiated(receipt)) throw new Error("Transfer not initiated");
-    const txstatus = await getTransactionStatus(receipt.originTxs[receipt.originTxs.length - 1]!);
+    const txstatus = await getTransactionStatus(
+      receipt.originTxs[receipt.originTxs.length - 1]!
+    );
     if (!txstatus) return;
     yield { ...receipt, txstatus };
   }
