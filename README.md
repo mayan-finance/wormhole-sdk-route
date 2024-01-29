@@ -5,7 +5,13 @@
 (Temporary)
 
 ```
-npm link @mayanfinance/swap-sdk
+git submodule init
+git submodule update
+cd swap-sdk
+npm i
+npm run build
+cd -
+npm i
 ```
 
 Build:
