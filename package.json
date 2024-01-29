@@ -1,6 +1,6 @@
 {
   "name": "@mayanfinance/wormhole-sdk-route",
-  "version": "0.0.1",
+  "version": "0.0.1-beta.0",
   "license": "Apache-2.0",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -24,6 +24,9 @@
     "build:cjs": "tsc -p ./tsconfig.cjs.json",
     "build:esm": "tsc -p ./tsconfig.esm.json",
     "build": "npm run build:cjs && npm run build:esm",
+    "publish": "npm publish --access public --tag $TAG",
+    "pub:beta": "TAG=beta npm run publish",
+    "pub:latest": "TAG=latest npm run publish",
     "docs": "typedoc",
     "example:swap": "tsx examples/swap.ts"
   },

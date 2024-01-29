@@ -5,7 +5,7 @@
 (Temporary)
 
 ```
-npm link @mayanfinance/swap-sdk @wormhole-foundation/connect-sdk @wormhole-foundation/connect-sdk-evm @wormhole-foundation/connect-sdk-solana
+npm link @mayanfinance/swap-sdk
 ```
 
 Build:
