@@ -33,9 +33,9 @@
   "dependencies": {
     "@solana/web3.js": "^1.89.1",
     "@mayanfinance/swap-sdk": "file:./swap-sdk",
-    "@wormhole-foundation/connect-sdk": "0.4.0-beta.2",
-    "@wormhole-foundation/connect-sdk-evm": "0.4.0-beta.2",
-    "@wormhole-foundation/connect-sdk-solana": "0.4.0-beta.2",
+    "@wormhole-foundation/connect-sdk": "0.4.0-beta.8",
+    "@wormhole-foundation/connect-sdk-evm": "0.4.0-beta.8",
+    "@wormhole-foundation/connect-sdk-solana": "0.4.0-beta.8",
     "axios": "^1.4.0",
     "ethers": "^6"
   },
