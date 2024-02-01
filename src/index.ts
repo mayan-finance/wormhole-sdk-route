@@ -154,17 +154,17 @@ export class MayanRoute<N extends Network>
     const fullQuote: Q = {
       sourceToken: {
         token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
-        amount: amount.parse(quote.effectiveAmountIn, quote.fromToken.decimals),
+        amount: amount.parse(quote.effectiveAmountIn.toPrecision(quote.fromToken.decimals), quote.fromToken.decimals),
       },
       destinationToken: {
         token: Wormhole.tokenId(to.chain, this.destTokenAddress()),
-        amount: amount.parse(quote.expectedAmountOut, quote.toToken.decimals),
+        amount: amount.parse(quote.expectedAmountOut.toPrecision(quote.toToken.decimals), quote.toToken.decimals),
       },
       relayFee: {
         token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
-        amount: amount.parse(quote.redeemRelayerFee, quote.fromToken.decimals),
+        amount: amount.parse(quote.redeemRelayerFee.toPrecision(quote.fromToken.decimals), quote.fromToken.decimals),
       },
-      destinationNativeGas: amount.parse(quote.gasDrop, quote.toToken.decimals),
+      destinationNativeGas: amount.parse(quote.gasDrop.toPrecision(quote.toToken.decimals), quote.toToken.decimals),
     };
     return fullQuote;
   }
