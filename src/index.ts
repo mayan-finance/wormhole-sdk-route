@@ -44,16 +44,17 @@ export namespace MayanRoute {
   }
 }
 
-type Q = routes.Quote;
 type Op = MayanRoute.Options;
 type Vp = MayanRoute.ValidatedParams;
+type Q = routes.Quote<Op, Vp>;
+type QR = routes.QuoteResult<Op, Vp>;
 type R = routes.Receipt;
 
 type Tp = routes.TransferParams<Op>;
 type Vr = routes.ValidationResult<Op>;
 
 export class MayanRoute<N extends Network>
-  extends routes.AutomaticRoute<N, Op, R, Q>
+  extends routes.AutomaticRoute<N, Op, Vp, R>
   implements routes.StaticRouteMethods<typeof MayanRoute>
 {
   MIN_DEADLINE = 60;
@@ -146,29 +147,37 @@ export class MayanRoute<N extends Network>
     return await fetchQuote(quoteOpts);
   }
 
-  async quote(params: Vp) {
-    const { from, to } = this.request;
-    const quote = await this.fetchQuote(params);
+  async quote(params: Vp): Promise<QR> {
+    try {
+      const { from, to } = this.request;
+      const quote = await this.fetchQuote(params);
 
-    const fullQuote: Q = {
-      sourceToken: {
-        token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
-        amount: quote.effectiveAmountIn.toString(),
-      },
-      destinationToken: {
-        token: Wormhole.tokenId(to.chain, this.destTokenAddress()),
-        amount: quote.expectedAmountOut.toString(),
-      },
-      relayFee: {
-        token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
-        amount: quote.redeemRelayerFee.toString(),
-      },
-      destinationNativeGas: quote.gasDrop.toString(),
-    };
-    return fullQuote;
+      const fullQuote: Q = {
+        sourceToken: {
+          token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
+          amount: quote.effectiveAmountIn.toString(),
+        },
+        destinationToken: {
+          token: Wormhole.tokenId(to.chain, this.destTokenAddress()),
+          amount: quote.expectedAmountOut.toString(),
+        },
+        relayFee: {
+          token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
+          amount: quote.redeemRelayerFee.toString(),
+        },
+        destinationNativeGas: quote.gasDrop.toString(),
+      };
+      return fullQuote;
+    } catch (e) {
+      return {
+        success: false,
+        error: e as Error,
+      }
+    }
   }
 
-  async initiate(signer: Signer<N>, params: Vp) {
+  async initiate(signer: Signer<N>, quote: Q) {
+    const { params } = quote;
     const originAddress = canonicalAddress(this.request.from);
     const destinationAddress = canonicalAddress(this.request.to);
 
