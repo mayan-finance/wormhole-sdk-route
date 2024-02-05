@@ -18,6 +18,7 @@ import {
   isNative,
   isSourceInitiated,
   routes,
+  amount,
 } from "@wormhole-foundation/connect-sdk";
 import {
   NATIVE_CONTRACT_ADDRESS,
@@ -153,19 +154,21 @@ export class MayanRoute<N extends Network>
       const quote = await this.fetchQuote(params);
 
       const fullQuote: Q = {
+        success: true,
+        params,
         sourceToken: {
           token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
-          amount: quote.effectiveAmountIn.toString(),
+          amount: amount.parse(quote.effectiveAmountIn, quote.fromToken.decimals),
         },
         destinationToken: {
           token: Wormhole.tokenId(to.chain, this.destTokenAddress()),
-          amount: quote.expectedAmountOut.toString(),
+          amount: amount.parse(quote.expectedAmountOut, quote.toToken.decimals),
         },
         relayFee: {
           token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
-          amount: quote.redeemRelayerFee.toString(),
+          amount: amount.parse(quote.redeemRelayerFee, quote.toToken.decimals),
         },
-        destinationNativeGas: quote.gasDrop.toString(),
+        destinationNativeGas: amount.parse(quote.gasDrop, quote.toToken.decimals),
       };
       return fullQuote;
     } catch (e) {
