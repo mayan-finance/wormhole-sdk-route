@@ -28,7 +28,8 @@
     "pub:beta": "TAG=beta npm run publish",
     "pub:latest": "TAG=latest npm run publish",
     "docs": "typedoc",
-    "example:swap": "tsx examples/swap.ts"
+    "cache": "npx tsx scripts/cache_tokens.ts",
+    "example:swap": "npx tsx examples/swap.ts"
   },
   "dependencies": {
     "@mayanfinance/swap-sdk": "github:artursapek/swap-sdk#mayan-ethers-6",
