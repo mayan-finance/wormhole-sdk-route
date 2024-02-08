@@ -1,6 +1,7 @@
 import {
   ChainName as MayanChainName,
   SolanaTransactionSigner,
+  fetchTokenList,
   Token as MayanToken,
 } from "@mayanfinance/swap-sdk";
 import { ethers } from "ethers";
@@ -48,7 +49,13 @@ export async function fetchTokensForChain(chain: Chain): Promise<TokenId[]> {
     return tokenListCache[chain] as TokenId[];
   }
 
-  const mayanTokens: MayanToken[] = tokenCache[toMayanChainName(chain)];
+  let mayanTokens: MayanToken[];
+  let chainName = toMayanChainName(chain);
+  try {
+    mayanTokens = await fetchTokenList(chainName);
+  } catch (e) {
+    mayanTokens = tokenCache[toMayanChainName(chain)];
+  }
 
   const whTokens: TokenId[] = mayanTokens.map((mt: MayanToken): TokenId => {
     if (mt.contract === NATIVE_CONTRACT_ADDRESS) {
