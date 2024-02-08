@@ -54,7 +54,7 @@ export async function fetchTokensForChain(chain: Chain): Promise<TokenId[]> {
   try {
     mayanTokens = await fetchTokenList(chainName);
   } catch (e) {
-    mayanTokens = tokenCache[toMayanChainName(chain)];
+    mayanTokens = tokenCache[chainName];
   }
 
   const whTokens: TokenId[] = mayanTokens.map((mt: MayanToken): TokenId => {
