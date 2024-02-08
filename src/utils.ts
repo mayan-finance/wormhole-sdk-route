@@ -1,7 +1,6 @@
 import {
   ChainName as MayanChainName,
   SolanaTransactionSigner,
-  fetchTokenList,
   Token as MayanToken,
 } from "@mayanfinance/swap-sdk";
 import { ethers } from "ethers";
@@ -17,6 +16,7 @@ import {
 } from "@wormhole-foundation/connect-sdk";
 import { isEvmNativeSigner } from "@wormhole-foundation/connect-sdk-evm";
 import { SolanaUnsignedTransaction } from "@wormhole-foundation/connect-sdk-solana";
+import tokenCache from "./tokens.json";
 import axios from "axios";
 
 export const NATIVE_CONTRACT_ADDRESS =
@@ -48,9 +48,8 @@ export async function fetchTokensForChain(chain: Chain): Promise<TokenId[]> {
     return tokenListCache[chain] as TokenId[];
   }
 
-  const mayanTokens: MayanToken[] = await fetchTokenList(
-    toMayanChainName(chain)
-  );
+  const mayanTokens: MayanToken[] = tokenCache[toMayanChainName(chain)];
+
   const whTokens: TokenId[] = mayanTokens.map((mt: MayanToken): TokenId => {
     if (mt.contract === NATIVE_CONTRACT_ADDRESS) {
       return nativeTokenId(chain);
