@@ -158,24 +158,36 @@ export class MayanRoute<N extends Network>
         params,
         sourceToken: {
           token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
-          amount: amount.parse(quote.effectiveAmountIn.toFixed(quote.fromToken.decimals), quote.fromToken.decimals),
+          amount: amount.parse(
+            quote.effectiveAmountIn.toFixed(quote.fromToken.decimals),
+            quote.fromToken.decimals
+          ),
         },
         destinationToken: {
           token: Wormhole.tokenId(to.chain, this.destTokenAddress()),
-          amount: amount.parse(quote.expectedAmountOut.toFixed(quote.toToken.decimals), quote.toToken.decimals),
+          amount: amount.parse(
+            quote.expectedAmountOut.toFixed(quote.toToken.decimals),
+            quote.toToken.decimals
+          ),
         },
         relayFee: {
           token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
-          amount: amount.parse(quote.redeemRelayerFee.toFixed(quote.fromToken.decimals), quote.fromToken.decimals),
+          amount: amount.parse(
+            quote.redeemRelayerFee.toFixed(quote.fromToken.decimals),
+            quote.fromToken.decimals
+          ),
         },
-        destinationNativeGas: amount.parse(quote.gasDrop.toFixed(quote.toToken.decimals), quote.toToken.decimals),
+        destinationNativeGas: amount.parse(
+          quote.gasDrop.toFixed(quote.toToken.decimals),
+          quote.toToken.decimals
+        ),
       };
       return fullQuote;
     } catch (e) {
       return {
         success: false,
         error: e as Error,
-      }
+      };
     }
   }
 
@@ -232,5 +244,9 @@ export class MayanRoute<N extends Network>
     );
     if (!txstatus) return;
     yield { ...receipt, txstatus };
+  }
+
+  override transferUrl(txid: string): string {
+    return `https://explorer.mayan.finance/swap/${txid}`;
   }
 }
