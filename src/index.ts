@@ -14,10 +14,10 @@ import {
   TokenId,
   TransferState,
   Wormhole,
+  amount,
   canonicalAddress,
   isNative,
   isSourceInitiated,
-  amount,
   routes,
 } from "@wormhole-foundation/connect-sdk";
 import {
@@ -28,6 +28,7 @@ import {
   mayanSolanaSigner,
   supportedChains,
   toMayanChainName,
+  txStatusToReceipt,
 } from "./utils";
 
 export namespace MayanRoute {
@@ -237,10 +238,16 @@ export class MayanRoute<N extends Network>
 
   public override async *track(receipt: R, timeout?: number) {
     if (!isSourceInitiated(receipt)) throw new Error("Transfer not initiated");
+
     const txstatus = await getTransactionStatus(
       receipt.originTxs[receipt.originTxs.length - 1]!
     );
     if (!txstatus) return;
+
+    receipt = txStatusToReceipt(txstatus);
+
+    // TODO: loop until timeout?
+
     yield { ...receipt, txstatus };
   }
 

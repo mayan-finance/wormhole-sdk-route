@@ -1,24 +1,34 @@
 import {
   ChainName as MayanChainName,
+  Token as MayanToken,
   SolanaTransactionSigner,
   fetchTokenList,
-  Token as MayanToken,
 } from "@mayanfinance/swap-sdk";
-import { ethers } from "ethers";
 import { Transaction } from "@solana/web3.js";
 import {
+  AttestationReceipt,
   Chain,
-  TokenId,
-  isSignOnlySigner,
+  CompletedTransferReceipt,
+  FailedTransferReceipt,
   Signer,
+  SourceFinalizedTransferReceipt,
+  SourceInitiatedTransferReceipt,
+  TokenId,
   TransactionId,
-  toNative,
+  TransferState,
+  deserialize,
+  encoding,
+  isSignOnlySigner,
   nativeTokenId,
+  routes,
+  toChain,
+  toNative,
 } from "@wormhole-foundation/connect-sdk";
 import { isEvmNativeSigner } from "@wormhole-foundation/connect-sdk-evm";
 import { SolanaUnsignedTransaction } from "@wormhole-foundation/connect-sdk-solana";
-import tokenCache from "./tokens.json";
 import axios from "axios";
+import { ethers } from "ethers";
+import tokenCache from "./tokens.json";
 
 export const NATIVE_CONTRACT_ADDRESS =
   "0x0000000000000000000000000000000000000000";
@@ -36,6 +46,10 @@ const chainNameMap = {
 export function toMayanChainName(chain: Chain): MayanChainName {
   if (!chainNameMap[chain]) throw new Error(`Chain ${chain} not supported`);
   return chainNameMap[chain] as MayanChainName;
+}
+
+export function toWormholeChainName(chainIdStr: string): Chain {
+  return toChain(Number(chainIdStr));
 }
 
 export function supportedChains(): Chain[] {
@@ -102,6 +116,34 @@ export enum MayanTransactionStatus {
   REFUNDED_ON_EVM = "REFUNDED_ON_EVM",
   REFUNDED_ON_SOLANA = "REFUNDED_ON_SOLANA",
 }
+
+export function toWormholeTransferState(
+  mts: MayanTransactionStatus
+): TransferState {
+  switch (mts) {
+    case MayanTransactionStatus.SETTLED_ON_SOLANA:
+      return TransferState.DestinationInitiated;
+    case MayanTransactionStatus.REDEEMED_ON_EVM:
+      return TransferState.DestinationInitiated;
+    case MayanTransactionStatus.REFUNDED_ON_EVM:
+      return TransferState.Failed;
+    case MayanTransactionStatus.REFUNDED_ON_SOLANA:
+      return TransferState.Failed;
+    default:
+      return TransferState.SourceInitiated;
+  }
+}
+
+const possibleVaaTypes = [
+  // Bridge to swap chain (solana)
+  "transfer",
+  // Info about the swap
+  "swap",
+  // Successful, bridge to destination chain
+  "redeem",
+  // Unsuccessful auction, refund back to source chain (evm)
+  "refund",
+];
 
 export enum MayanTransactionGoal {
   // send from evm to solana
@@ -217,6 +259,139 @@ export interface Tx {
   txHash: string;
   goals: MayanTransactionGoal[];
   scannerUrl: string;
+}
+
+export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
+  const state = toWormholeTransferState(txStatus.status);
+  const srcChain = toWormholeChainName(txStatus.sourceChain as MayanChainName);
+  const dstChain = toWormholeChainName(txStatus.destChain as MayanChainName);
+
+  const originTxs = txStatus.txs
+    .filter((tx) => {
+      return (
+        // Send from Evm to Solana
+        tx.goals.includes(MayanTransactionGoal.Send) ||
+        // Register for auction on Solana
+        tx.goals.includes(MayanTransactionGoal.Register)
+      );
+    })
+    .map((tx) => {
+      return {
+        chain: srcChain,
+        txid: tx.txHash,
+      };
+    });
+
+  const destinationTxs = txStatus.txs
+    .filter((tx) => {
+      return tx.goals.includes(MayanTransactionGoal.Settle);
+    })
+    .map((tx) => {
+      return {
+        chain: dstChain,
+        txid: tx.txHash,
+      };
+    });
+
+  const attestations: { [key: string]: AttestationReceipt<"WormholeCore"> } =
+    {};
+  for (const vaaType of possibleVaaTypes) {
+    const key = `${vaaType}SignedVaa`;
+    if (key in txStatus && txStatus[key as keyof TransactionStatus] !== null) {
+      const vaa = deserialize(
+        "Uint8Array",
+        encoding.hex.decode(txStatus[key as keyof TransactionStatus])
+      );
+
+      attestations[vaaType] = {
+        id: {
+          emitter: vaa.emitterAddress,
+          sequence: vaa.sequence,
+          chain: vaa.emitterChain,
+        },
+        attestation: vaa,
+      };
+    }
+  }
+
+  switch (state) {
+    case TransferState.SourceInitiated:
+      // Initital transfer vaa from source chain
+      if ("transfer" in attestations && attestations["transfer"]) {
+        return {
+          from: srcChain,
+          to: dstChain,
+          originTxs,
+          state: TransferState.SourceFinalized,
+          attestation: attestations["transfer"],
+        } satisfies SourceFinalizedTransferReceipt<
+          AttestationReceipt<"WormholeCore">
+        >;
+      }
+      break;
+
+    case TransferState.DestinationInitiated:
+      // VAA to be redeemed on dest chain
+      if ("redeem" in attestations && attestations["redeem"]) {
+        return {
+          from: srcChain,
+          to: dstChain,
+          originTxs,
+          destinationTxs,
+          state,
+          attestation: attestations["redeem"],
+        } satisfies CompletedTransferReceipt<
+          AttestationReceipt<"WormholeCore">
+        >;
+      }
+
+      // Initial transfer vaa from orgin chain
+      if ("transfer" in attestations && attestations["transfer"]) {
+        return {
+          from: srcChain,
+          to: dstChain,
+          originTxs,
+          destinationTxs,
+          state,
+          attestation: attestations["transfer"],
+        } satisfies CompletedTransferReceipt<
+          AttestationReceipt<"WormholeCore">
+        >;
+      }
+
+      break;
+
+    case TransferState.Failed:
+      // VAA that is used to refund on source chain
+      if ("refund" in attestations && attestations["refund"]) {
+        return {
+          from: srcChain,
+          to: dstChain,
+          originTxs,
+          destinationTxs,
+          state: TransferState.Failed,
+          attestation: attestations["refund"],
+          error: "Refunded on source chain",
+        } satisfies FailedTransferReceipt<AttestationReceipt<"WormholeCore">>;
+      }
+
+      // No vaa to refund on source chain
+      return {
+        from: srcChain,
+        to: dstChain,
+        originTxs,
+        destinationTxs,
+        state: TransferState.Failed,
+        error: "Failed to complete transfer",
+      } satisfies FailedTransferReceipt<AttestationReceipt<"WormholeCore">>;
+  }
+
+  return {
+    from: srcChain,
+    to: dstChain,
+    originTxs,
+    state: TransferState.SourceInitiated,
+  } satisfies SourceInitiatedTransferReceipt;
 }
 
 export async function getTransactionStatus(

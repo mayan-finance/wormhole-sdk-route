@@ -1,9 +1,8 @@
 import {
+  Chain,
   ChainAddress,
   ChainContext,
   Network,
-  Platform,
-  PlatformToChains,
   Signer,
   Wormhole,
 } from "@wormhole-foundation/connect-sdk";
@@ -28,21 +27,15 @@ function getEnv(key: string): string {
   return val;
 }
 
-export interface TransferStuff<
-  N extends Network,
-  P extends Platform,
-  C extends PlatformToChains<P> = PlatformToChains<P>
-> {
-  chain: ChainContext<N, P, C>;
+export interface TransferStuff<N extends Network, C extends Chain> {
+  chain: ChainContext<N, C>;
   signer: Signer<N, C>;
   address: ChainAddress<C>;
 }
 
-export async function getStuff<
-  N extends Network,
-  P extends Platform,
-  C extends PlatformToChains<P>
->(chain: ChainContext<N, P, C>): Promise<TransferStuff<N, P, C>> {
+export async function getStuff<N extends Network, C extends Chain>(
+  chain: ChainContext<N, C>
+): Promise<TransferStuff<N, C>> {
   let signer: Signer;
   const platform = chain.platform.utils()._platform;
   switch (platform) {
