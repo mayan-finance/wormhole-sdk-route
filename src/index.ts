@@ -197,13 +197,11 @@ export class MayanRoute<N extends Network>
     const destinationAddress = canonicalAddress(this.request.to);
 
     try {
-      const quote = await this.fetchQuote(params);
-
       const rpc = await this.request.fromChain.getRpc();
       let txhash: string;
       if (this.request.from.chain === "Solana") {
         txhash = await swapFromSolana(
-          quote,
+          quote.details,
           originAddress,
           destinationAddress,
           params.options.deadlineInSeconds,
@@ -213,7 +211,7 @@ export class MayanRoute<N extends Network>
         );
       } else {
         const txres = await swapFromEvm(
-          quote,
+          quote.details,
           destinationAddress,
           params.options.deadlineInSeconds,
           undefined,
