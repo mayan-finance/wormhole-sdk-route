@@ -9,21 +9,20 @@ import {
   AttestationReceipt,
   Chain,
   CompletedTransferReceipt,
+  FailedTransferReceipt,
   Signer,
   SourceFinalizedTransferReceipt,
   SourceInitiatedTransferReceipt,
-  FailedTransferReceipt,
   TokenId,
   TransactionId,
   TransferState,
-  VAA,
   deserialize,
   encoding,
   isSignOnlySigner,
   nativeTokenId,
   routes,
-  toNative,
   toChain,
+  toNative,
 } from "@wormhole-foundation/connect-sdk";
 import { isEvmNativeSigner } from "@wormhole-foundation/connect-sdk-evm";
 import { SolanaUnsignedTransaction } from "@wormhole-foundation/connect-sdk-solana";
@@ -294,36 +293,37 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
       };
     });
 
-  const vaas: { [key: string]: VAA<"Uint8Array"> } = {};
+  const attestations: { [key: string]: AttestationReceipt<"WormholeCore"> } =
+    {};
   for (const vaaType of possibleVaaTypes) {
     const key = `${vaaType}SignedVaa`;
     if (key in txStatus && txStatus[key as keyof TransactionStatus] !== null) {
-      vaas[vaaType] = deserialize(
+      const vaa = deserialize(
         "Uint8Array",
         encoding.hex.decode(txStatus[key as keyof TransactionStatus])
       );
+
+      attestations[vaaType] = {
+        id: {
+          emitter: vaa.emitterAddress,
+          sequence: vaa.sequence,
+          chain: vaa.emitterChain,
+        },
+        attestation: vaa,
+      };
     }
   }
 
   switch (state) {
     case TransferState.SourceInitiated:
-      if ("transfer" in vaas && vaas["transfer"]) {
-        const vaa = vaas["transfer"];
-        const attestation = {
-          id: {
-            emitter: vaa.emitterAddress,
-            sequence: vaa.sequence,
-            chain: vaa.emitterChain,
-          },
-          attestation: vaa,
-        };
-
+      // Initital transfer vaa from source chain
+      if ("transfer" in attestations && attestations["transfer"]) {
         return {
           from: srcChain,
           to: dstChain,
           originTxs,
           state: TransferState.SourceFinalized,
-          attestation,
+          attestation: attestations["transfer"],
         } satisfies SourceFinalizedTransferReceipt<
           AttestationReceipt<"WormholeCore">
         >;
@@ -331,53 +331,59 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
       break;
 
     case TransferState.DestinationInitiated:
-      // VAA to redeem on dest chain
-      if ("redeem" in vaas && vaas["redeem"]) {
-        const vaa = vaas["redeem"];
-        const attestation = {
-          id: {
-            emitter: vaa.emitterAddress,
-            sequence: vaa.sequence,
-            chain: vaa.emitterChain,
-          },
-          attestation: vaa,
-        };
-
+      // VAA to be redeemed on dest chain
+      if ("redeem" in attestations && attestations["redeem"]) {
         return {
           from: srcChain,
           to: dstChain,
           originTxs,
           destinationTxs,
           state,
-          attestation,
+          attestation: attestations["redeem"],
         } satisfies CompletedTransferReceipt<
           AttestationReceipt<"WormholeCore">
         >;
       }
-      break;
 
-    case TransferState.Failed:
-      if ("refund" in vaas && vaas["refund"]) {
-        const vaa = vaas["refund"];
-        const attestation = {
-          id: {
-            emitter: vaa.emitterAddress,
-            sequence: vaa.sequence,
-            chain: vaa.emitterChain,
-          },
-          attestation: vaa,
-        };
-
+      // Initial transfer vaa from orgin chain
+      if ("transfer" in attestations && attestations["transfer"]) {
         return {
           from: srcChain,
           to: dstChain,
           originTxs,
-          attestation,
+          destinationTxs,
+          state,
+          attestation: attestations["transfer"],
+        } satisfies CompletedTransferReceipt<
+          AttestationReceipt<"WormholeCore">
+        >;
+      }
+
+      break;
+
+    case TransferState.Failed:
+      // VAA that is used to refund on source chain
+      if ("refund" in attestations && attestations["refund"]) {
+        return {
+          from: srcChain,
+          to: dstChain,
+          originTxs,
+          destinationTxs,
           state: TransferState.Failed,
+          attestation: attestations["refund"],
           error: "Refunded on source chain",
         } satisfies FailedTransferReceipt<AttestationReceipt<"WormholeCore">>;
       }
-      break;
+
+      // No vaa to refund on source chain
+      return {
+        from: srcChain,
+        to: dstChain,
+        originTxs,
+        destinationTxs,
+        state: TransferState.Failed,
+        error: "Failed to complete transfer",
+      } satisfies FailedTransferReceipt<AttestationReceipt<"WormholeCore">>;
   }
 
   return {
