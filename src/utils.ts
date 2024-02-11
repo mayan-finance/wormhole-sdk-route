@@ -23,6 +23,7 @@ import {
   nativeTokenId,
   routes,
   toNative,
+  toChain,
 } from "@wormhole-foundation/connect-sdk";
 import { isEvmNativeSigner } from "@wormhole-foundation/connect-sdk-evm";
 import { SolanaUnsignedTransaction } from "@wormhole-foundation/connect-sdk-solana";
@@ -43,18 +44,13 @@ const chainNameMap = {
   Aptos: "aptos",
 } as Record<Chain, MayanChainName>;
 
-const reverseChainMap = Object.fromEntries(
-  Object.entries(chainNameMap).map(([k, v]) => [v, k])
-) as Record<MayanChainName, Chain>;
-
 export function toMayanChainName(chain: Chain): MayanChainName {
   if (!chainNameMap[chain]) throw new Error(`Chain ${chain} not supported`);
   return chainNameMap[chain] as MayanChainName;
 }
 
-export function toWormholeChainName(chain: MayanChainName): Chain {
-  if (!reverseChainMap[chain]) throw new Error(`Chain ${chain} not supported`);
-  return reverseChainMap[chain] as Chain;
+export function toWormholeChainName(chainIdStr: string): Chain {
+  return toChain(Number(chainIdStr));
 }
 
 export function supportedChains(): Chain[] {
@@ -304,7 +300,7 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
     if (key in txStatus && txStatus[key as keyof TransactionStatus] !== null) {
       vaas[vaaType] = deserialize(
         "Uint8Array",
-        encoding.b64.decode(txStatus.redeemSignedVaa)
+        encoding.hex.decode(txStatus[key as keyof TransactionStatus])
       );
     }
   }
