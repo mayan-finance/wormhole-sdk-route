@@ -121,9 +121,11 @@ export class MayanRoute<N extends Network>
 
       return {
         valid: true,
-        params,
-        normalizedParams: {
-          slippagePercentage: params.options.slippage * 100,
+        params: {
+          ...params,
+          normalizedParams: {
+            slippagePercentage: params.options.slippage * 100,
+          },
         },
       } as Vr;
     } catch (e) {
