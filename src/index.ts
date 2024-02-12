@@ -165,26 +165,26 @@ export class MayanRoute<N extends Network>
         sourceToken: {
           token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
           amount: amount.parse(
-            quote.effectiveAmountIn.toFixed(quote.fromToken.decimals),
-            quote.fromToken.decimals
+            amount.denoise(quote.effectiveAmountIn, quote.fromToken.decimals),
+            quote.fromToken.decimals,
           ),
         },
         destinationToken: {
           token: Wormhole.tokenId(to.chain, this.destTokenAddress()),
           amount: amount.parse(
-            quote.expectedAmountOut.toFixed(quote.toToken.decimals),
+            amount.denoise(quote.expectedAmountOut, quote.toToken.decimals),
             quote.toToken.decimals
           ),
         },
         relayFee: {
           token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
           amount: amount.parse(
-            quote.redeemRelayerFee.toFixed(quote.fromToken.decimals),
+            amount.denoise(quote.redeemRelayerFee, quote.fromToken.decimals),
             quote.fromToken.decimals
           ),
         },
         destinationNativeGas: amount.parse(
-          quote.gasDrop.toFixed(quote.toToken.decimals),
+          amount.denoise(quote.gasDrop, quote.toToken.decimals),
           quote.toToken.decimals
         ),
       };
