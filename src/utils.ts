@@ -132,6 +132,16 @@ export function mayanEvmSigner(signer: Signer): ethers.Signer {
   throw new Error("Signer must be an EvmNativeSigner");
 }
 
+export function mayanEvmProvider(signer: ethers.Signer) {
+  return {
+    getBlock: async function (): Promise<{ timestamp: number }> {
+      let block = await signer.provider!.getBlock('latest');
+      if (block === null) throw new Error('Failed to get latest Ethereum block');
+      return block;
+    }
+  }
+}
+
 export enum MayanTransactionStatus {
   SETTLED_ON_SOLANA = "SETTLED_ON_SOLANA",
   REDEEMED_ON_EVM = "REDEEMED_ON_EVM",
