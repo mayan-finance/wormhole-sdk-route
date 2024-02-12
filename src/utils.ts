@@ -33,6 +33,28 @@ import tokenCache from "./tokens.json";
 export const NATIVE_CONTRACT_ADDRESS =
   "0x0000000000000000000000000000000000000000";
 
+// Deadline in minutes recommended by api
+// hardcoded for now, but can be fetched from
+// https://sia.mayan.finance/v3/init
+const defaultDeadlines: {
+  [key in Chain]?: number;
+} = {
+  Bsc: 16,
+  Avalanche: 16,
+  Polygon: 18,
+  Ethereum: 76,
+  Solana: 10,
+  Arbitrum: 96,
+  Aptos: 50,
+};
+
+// return the default deadline for a given chain in seconds
+// or return 1 hour if not found
+export function getDefaultDeadline(chain: Chain): number {
+  if (chain in defaultDeadlines) return defaultDeadlines[chain]! * 60;
+  return 60 * 60;
+}
+
 const chainNameMap = {
   Solana: "solana",
   Ethereum: "ethereum",
