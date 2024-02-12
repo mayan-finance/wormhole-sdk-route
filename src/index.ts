@@ -23,6 +23,7 @@ import {
 import {
   NATIVE_CONTRACT_ADDRESS,
   fetchTokensForChain,
+  getDefaultDeadline,
   getTransactionStatus,
   mayanEvmSigner,
   mayanSolanaSigner,
@@ -70,7 +71,11 @@ export class MayanRoute<N extends Network>
   };
 
   getDefaultOptions(): Op {
-    return { gasDrop: 0, slippage: 0.05, deadlineInSeconds: 60 * 10 };
+    return {
+      gasDrop: 0,
+      slippage: 0.05,
+      deadlineInSeconds: getDefaultDeadline(this.request.from.chain),
+    };
   }
 
   static supportedNetworks(): Network[] {

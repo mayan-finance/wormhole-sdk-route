@@ -33,6 +33,23 @@ import tokenCache from "./tokens.json";
 export const NATIVE_CONTRACT_ADDRESS =
   "0x0000000000000000000000000000000000000000";
 
+const defaultDeadlines: {
+  [key in Chain]?: number;
+} = {
+  Bsc: 16,
+  Avalanche: 16,
+  Polygon: 18,
+  Ethereum: 76,
+  Solana: 10,
+  Arbitrum: 96,
+  Aptos: 50,
+};
+
+export function getDefaultDeadline(chain: Chain): number {
+  if (chain in defaultDeadlines) return defaultDeadlines[chain]! * 60;
+  return 60 * 60;
+}
+
 const chainNameMap = {
   Solana: "solana",
   Ethereum: "ethereum",
