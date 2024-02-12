@@ -62,7 +62,7 @@ export class MayanRoute<N extends Network>
   implements routes.StaticRouteMethods<typeof MayanRoute>
 {
   MIN_DEADLINE = 60;
-  MAX_SLIPPAGE = 1;
+  MAX_SLIPPAGE = 100;
 
   NATIVE_GAS_DROPOFF_SUPPORTED = true;
   tokenList?: Token[];
