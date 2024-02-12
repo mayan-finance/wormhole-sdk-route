@@ -25,6 +25,7 @@ import {
   fetchTokensForChain,
   getDefaultDeadline,
   getTransactionStatus,
+  mayanEvmProvider,
   mayanEvmSigner,
   mayanSolanaSigner,
   supportedChains,
@@ -217,12 +218,14 @@ export class MayanRoute<N extends Network>
           rpc
         );
       } else {
+        const mayanSigner = mayanEvmSigner(signer);
         const txres = await swapFromEvm(
           quote.details!,
           destinationAddress,
           params.options.deadlineInSeconds,
           undefined,
-          mayanEvmSigner(signer)
+          mayanEvmProvider(mayanSigner),
+          mayanSigner,
         );
 
         txhash = txres.hash;
