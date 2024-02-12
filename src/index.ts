@@ -74,7 +74,7 @@ export class MayanRoute<N extends Network>
   getDefaultOptions(): Op {
     return {
       gasDrop: 0,
-      slippage: 0.05,
+      slippage: 5, // this means 5% not 500% dont worry
       deadlineInSeconds: getDefaultDeadline(this.request.from.chain),
     };
   }
