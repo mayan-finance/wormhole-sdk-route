@@ -40,7 +40,7 @@ export namespace MayanRoute {
     deadlineInSeconds: number;
   };
   export type NormalizedParams = {
-    amount: string;
+    slippagePercentage: number;
   };
   export interface ValidatedParams
     extends routes.ValidatedTransferParams<Options> {
@@ -62,7 +62,7 @@ export class MayanRoute<N extends Network>
   implements routes.StaticRouteMethods<typeof MayanRoute>
 {
   MIN_DEADLINE = 60;
-  MAX_SLIPPAGE = 100;
+  MAX_SLIPPAGE = 1;
 
   NATIVE_GAS_DROPOFF_SUPPORTED = true;
   tokenList?: Token[];
@@ -74,7 +74,7 @@ export class MayanRoute<N extends Network>
   getDefaultOptions(): Op {
     return {
       gasDrop: 0,
-      slippage: 5, // this means 5% not 500% dont worry
+      slippage: 0.05,
       deadlineInSeconds: getDefaultDeadline(this.request.from.chain),
     };
   }
@@ -119,7 +119,13 @@ export class MayanRoute<N extends Network>
       if (params.options.deadlineInSeconds < this.MIN_DEADLINE)
         throw new Error("Deadline must be at least 60 seconds");
 
-      return { valid: true, params } as Vr;
+      return {
+        valid: true,
+        params,
+        normalizedParams: {
+          slippagePercentage: params.options.slippage * 100,
+        },
+      } as Vr;
     } catch (e) {
       return { valid: false, params, error: e as Error };
     }
@@ -158,7 +164,14 @@ export class MayanRoute<N extends Network>
   async quote(params: Vp): Promise<QR> {
     try {
       const { from, to } = this.request;
-      const quote = await this.fetchQuote(params);
+      const quote = await this.fetchQuote({
+        ...params,
+        options: {
+          ...params.options,
+          // overwrite slippage with mayan-normalized value
+          slippage: params.normalizedParams.slippagePercentage,
+        },
+      });
 
       const fullQuote: Q = {
         success: true,
@@ -167,7 +180,7 @@ export class MayanRoute<N extends Network>
           token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
           amount: amount.parse(
             amount.denoise(quote.effectiveAmountIn, quote.fromToken.decimals),
-            quote.fromToken.decimals,
+            quote.fromToken.decimals
           ),
         },
         destinationToken: {
@@ -225,7 +238,7 @@ export class MayanRoute<N extends Network>
           params.options.deadlineInSeconds,
           undefined,
           mayanEvmProvider(mayanSigner),
-          mayanSigner,
+          mayanSigner
         );
 
         txhash = txres.hash;
