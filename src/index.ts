@@ -49,8 +49,8 @@ export namespace MayanRoute {
 
 type Op = MayanRoute.Options;
 type Vp = MayanRoute.ValidatedParams;
-type Q = routes.Quote<Op, Vp>;
-type QR = routes.QuoteResult<Op, Vp>;
+type Q = routes.Quote<Op, Vp, MayanQuote>;
+type QR = routes.QuoteResult<Op, Vp, MayanQuote>;
 type R = routes.Receipt;
 
 type Tp = routes.TransferParams<Op>;
@@ -187,6 +187,7 @@ export class MayanRoute<N extends Network>
           quote.gasDrop.toFixed(quote.toToken.decimals),
           quote.toToken.decimals
         ),
+        details: quote,
       };
       return fullQuote;
     } catch (e) {
@@ -207,7 +208,7 @@ export class MayanRoute<N extends Network>
       let txhash: string;
       if (this.request.from.chain === "Solana") {
         txhash = await swapFromSolana(
-          quote.details,
+          quote.details!,
           originAddress,
           destinationAddress,
           params.options.deadlineInSeconds,
@@ -217,7 +218,7 @@ export class MayanRoute<N extends Network>
         );
       } else {
         const txres = await swapFromEvm(
-          quote.details,
+          quote.details!,
           destinationAddress,
           params.options.deadlineInSeconds,
           undefined,
