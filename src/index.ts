@@ -22,8 +22,8 @@ import {
   isSignAndSendSigner,
   isSignOnlySigner,
   isSourceInitiated,
+  nativeChainIds,
   routes,
-  toChainId,
 } from "@wormhole-foundation/connect-sdk";
 import {
   EvmChains,
@@ -183,6 +183,30 @@ export class MayanRoute<N extends Network>
         },
       });
 
+      if (quote.effectiveAmountIn < quote.refundRelayerFee) {
+        throw new Error(
+          "Refund relayer fee is greater than the effective amount in"
+        );
+      }
+
+      // TODO: what if source and dest are _both_ EVM?
+      const relayFee =
+        quote.fromChain !== "solana"
+          ? {
+              token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
+              amount: amount.parse(
+                amount.denoise(quote.swapRelayerFee, quote.fromToken.decimals),
+                quote.fromToken.decimals
+              ),
+            }
+          : {
+              token: Wormhole.tokenId(to.chain, this.destTokenAddress()),
+              amount: amount.parse(
+                amount.denoise(quote.redeemRelayerFee, quote.toToken.decimals),
+                quote.toToken.decimals
+              ),
+            };
+
       const fullQuote: Q = {
         success: true,
         params,
@@ -200,13 +224,7 @@ export class MayanRoute<N extends Network>
             quote.toToken.decimals
           ),
         },
-        relayFee: {
-          token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
-          amount: amount.parse(
-            amount.denoise(quote.redeemRelayerFee, quote.fromToken.decimals),
-            quote.fromToken.decimals
-          ),
-        },
+        relayFee,
         destinationNativeGas: amount.parse(
           amount.denoise(quote.gasDrop, quote.toToken.decimals),
           quote.toToken.decimals
@@ -275,13 +293,18 @@ export class MayanRoute<N extends Network>
           }
         }
 
+        const nativeChainId = nativeChainIds.networkChainToNativeChainId.get(
+          this.request.fromChain.network,
+          this.request.fromChain.chain
+        );
+
         const txReq = await getSwapFromEvmTxPayload(
           quote.details!,
           destinationAddress,
           params.options.deadlineInSeconds,
           undefined,
           originAddress,
-          toChainId(this.request.from.chain),
+          Number(nativeChainId!),
           rpc
         );
         txReqs.push(
