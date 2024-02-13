@@ -363,13 +363,18 @@ export class MayanRoute<N extends Network>
 
         receipt = txStatusToReceipt(txstatus);
         yield { ...receipt, txstatus };
-
-        if (isCompleted(receipt)) return receipt;
       } catch (e) {
+        // get transaction status checks for 404 and returns null
+        // if we get an error here its something else
         throw e;
       }
+
+      if (isCompleted(receipt)) return receipt;
+      leftover -= Date.now() - start;
+
+      // sleep for 1 second so we dont spam the endpoint
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-    leftover -= Date.now() - start;
   }
 
   override transferUrl(txid: string): string {
