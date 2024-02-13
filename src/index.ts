@@ -1,6 +1,7 @@
 import {
   Quote as MayanQuote,
   Token,
+  addresses,
   fetchQuote,
   swapFromEvm,
   swapFromSolana,
@@ -12,6 +13,7 @@ import {
   Signer,
   SourceInitiatedTransferReceipt,
   TokenId,
+  TransactionId,
   TransferState,
   Wormhole,
   amount,
@@ -20,6 +22,7 @@ import {
   isSourceInitiated,
   routes,
 } from "@wormhole-foundation/connect-sdk";
+import { EvmPlatform } from "@wormhole-foundation/connect-sdk-evm";
 import {
   NATIVE_CONTRACT_ADDRESS,
   fetchTokensForChain,
@@ -221,20 +224,47 @@ export class MayanRoute<N extends Network>
 
     try {
       const rpc = await this.request.fromChain.getRpc();
-      let txhash: string;
+      const txs: TransactionId[] = [];
       if (this.request.from.chain === "Solana") {
-        txhash = await swapFromSolana(
-          quote.details!,
-          originAddress,
-          destinationAddress,
-          params.options.deadlineInSeconds,
-          undefined,
-          mayanSolanaSigner(signer),
-          rpc
-        );
+        txs.push({
+          chain: "Solana",
+          txid: await swapFromSolana(
+            quote.details!,
+            originAddress,
+            destinationAddress,
+            params.options.deadlineInSeconds,
+            undefined,
+            mayanSolanaSigner(signer),
+            rpc
+          ),
+        });
       } else {
         const mayanSigner = mayanEvmSigner(signer);
-        const txres = await swapFromEvm(
+
+        if (!isNative(this.request.source.id.address)) {
+          const tokenContract = EvmPlatform.getTokenImplementation(
+            await this.request.fromChain.getRpc(),
+            this.sourceTokenAddress()
+          );
+
+          const allowance = await tokenContract.allowance(
+            canonicalAddress(this.request.from),
+            addresses.MAYAN_EVM_CONTRACT
+          );
+
+          const amt = amount.units(quote.sourceToken.amount);
+          if (allowance < amt) {
+            const txReq = await tokenContract.approve.populateTransaction(
+              // mayan contract address,
+              addresses.MAYAN_EVM_CONTRACT,
+              amt
+            );
+            const result = await mayanSigner.sendTransaction(txReq);
+            txs.push({ chain: this.request.from.chain, txid: result.hash });
+          }
+        }
+
+        const swapResult = await swapFromEvm(
           quote.details!,
           destinationAddress,
           params.options.deadlineInSeconds,
@@ -243,16 +273,17 @@ export class MayanRoute<N extends Network>
           mayanSigner
         );
 
-        txhash = txres.hash;
+        txs.push({
+          chain: this.request.from.chain,
+          txid: swapResult.hash,
+        });
       }
-
-      const txid = { chain: this.request.from.chain, txid: txhash };
 
       return {
         from: this.request.from.chain,
         to: this.request.to.chain,
         state: TransferState.SourceInitiated,
-        originTxs: [txid],
+        originTxs: txs,
       } satisfies SourceInitiatedTransferReceipt;
     } catch (e) {
       console.error(e);
