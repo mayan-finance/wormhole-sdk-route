@@ -354,19 +354,14 @@ export class MayanRoute<N extends Network>
       const start = Date.now();
       if (!isSourceInitiated(receipt))
         throw new Error("Transfer not initiated");
-      try {
-        const txstatus = await getTransactionStatus(
-          receipt.originTxs[receipt.originTxs.length - 1]!
-        );
-        if (!txstatus) continue;
 
-        receipt = txStatusToReceipt(txstatus);
-        yield { ...receipt, txstatus };
-      } catch (e) {
-        // get transaction status checks for 404 and returns null
-        // if we get an error here its something else
-        throw e;
-      }
+      const txstatus = await getTransactionStatus(
+        receipt.originTxs[receipt.originTxs.length - 1]!
+      );
+      if (!txstatus) continue;
+
+      receipt = txStatusToReceipt(txstatus);
+      yield { ...receipt, txstatus };
 
       if (isCompleted(receipt)) return receipt;
 
