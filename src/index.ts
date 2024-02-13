@@ -348,11 +348,10 @@ export class MayanRoute<N extends Network>
   }
 
   public override async *track(receipt: R, timeout?: number) {
-    const start = Date.now();
-
     // What should be the default if no timeout is provided?
     let leftover = timeout ? timeout : 60 * 60 * 1000;
     while (leftover > 0) {
+      const start = Date.now();
       if (!isSourceInitiated(receipt))
         throw new Error("Transfer not initiated");
       try {
@@ -370,10 +369,10 @@ export class MayanRoute<N extends Network>
       }
 
       if (isCompleted(receipt)) return receipt;
-      leftover -= Date.now() - start;
 
       // sleep for 1 second so we dont spam the endpoint
       await new Promise((resolve) => setTimeout(resolve, 1000));
+      leftover -= Date.now() - start;
     }
 
     return receipt;
