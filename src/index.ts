@@ -18,6 +18,7 @@ import {
   Wormhole,
   amount,
   canonicalAddress,
+  isCompleted,
   isNative,
   isSignAndSendSigner,
   isSignOnlySigner,
@@ -347,18 +348,30 @@ export class MayanRoute<N extends Network>
   }
 
   public override async *track(receipt: R, timeout?: number) {
-    if (!isSourceInitiated(receipt)) throw new Error("Transfer not initiated");
+    // What should be the default if no timeout is provided?
+    let leftover = timeout ? timeout : 60 * 60 * 1000;
+    while (leftover > 0) {
+      const start = Date.now();
+      if (!isSourceInitiated(receipt))
+        throw new Error("Transfer not initiated");
 
-    const txstatus = await getTransactionStatus(
-      receipt.originTxs[receipt.originTxs.length - 1]!
-    );
-    if (!txstatus) return;
+      const txstatus = await getTransactionStatus(
+        receipt.originTxs[receipt.originTxs.length - 1]!
+      );
 
-    receipt = txStatusToReceipt(txstatus);
+      if (txstatus) {
+        receipt = txStatusToReceipt(txstatus);
+        yield { ...receipt, txstatus };
 
-    // TODO: loop until timeout?
+        if (isCompleted(receipt)) return receipt;
+      }
 
-    yield { ...receipt, txstatus };
+      // sleep for 1 second so we dont spam the endpoint
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      leftover -= Date.now() - start;
+    }
+
+    return receipt;
   }
 
   override transferUrl(txid: string): string {
