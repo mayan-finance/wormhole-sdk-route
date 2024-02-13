@@ -259,7 +259,12 @@ export class MayanRoute<N extends Network>
               addresses.MAYAN_EVM_CONTRACT,
               amt
             );
+
             const result = await mayanSigner.sendTransaction(txReq);
+
+            // Waits until the transaction has been confirmed
+            await mayanSigner.provider?.waitForTransaction(result.hash);
+
             txs.push({ chain: this.request.from.chain, txid: result.hash });
           }
         }
