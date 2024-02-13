@@ -358,12 +358,13 @@ export class MayanRoute<N extends Network>
       const txstatus = await getTransactionStatus(
         receipt.originTxs[receipt.originTxs.length - 1]!
       );
-      if (!txstatus) continue;
 
-      receipt = txStatusToReceipt(txstatus);
-      yield { ...receipt, txstatus };
+      if (txstatus) {
+        receipt = txStatusToReceipt(txstatus);
+        yield { ...receipt, txstatus };
 
-      if (isCompleted(receipt)) return receipt;
+        if (isCompleted(receipt)) return receipt;
+      }
 
       // sleep for 1 second so we dont spam the endpoint
       await new Promise((resolve) => setTimeout(resolve, 1000));
