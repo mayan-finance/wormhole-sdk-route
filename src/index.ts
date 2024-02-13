@@ -3,7 +3,7 @@ import {
   Token,
   addresses,
   fetchQuote,
-  swapFromEvm,
+  getSwapFromEvmTxPayload,
   swapFromSolana,
 } from "@mayanfinance/swap-sdk";
 import {
@@ -19,17 +19,22 @@ import {
   amount,
   canonicalAddress,
   isNative,
+  isSignAndSendSigner,
+  isSignOnlySigner,
   isSourceInitiated,
   routes,
+  toChainId,
 } from "@wormhole-foundation/connect-sdk";
-import { EvmPlatform } from "@wormhole-foundation/connect-sdk-evm";
+import {
+  EvmChains,
+  EvmPlatform,
+  EvmUnsignedTransaction,
+} from "@wormhole-foundation/connect-sdk-evm";
 import {
   NATIVE_CONTRACT_ADDRESS,
   fetchTokensForChain,
   getDefaultDeadline,
   getTransactionStatus,
-  mayanEvmProvider,
-  mayanEvmSigner,
   mayanSolanaSigner,
   supportedChains,
   toMayanChainName,
@@ -239,7 +244,7 @@ export class MayanRoute<N extends Network>
           ),
         });
       } else {
-        const mayanSigner = mayanEvmSigner(signer);
+        const txReqs: EvmUnsignedTransaction<N, EvmChains>[] = [];
 
         if (!isNative(this.request.source.id.address)) {
           const tokenContract = EvmPlatform.getTokenImplementation(
@@ -259,24 +264,51 @@ export class MayanRoute<N extends Network>
               addresses.MAYAN_EVM_CONTRACT,
               amt
             );
-            const result = await mayanSigner.sendTransaction(txReq);
-            txs.push({ chain: this.request.from.chain, txid: result.hash });
+            txReqs.push(
+              new EvmUnsignedTransaction(
+                txReq,
+                this.request.fromChain.network,
+                this.request.fromChain.chain as EvmChains,
+                "Approve Allowance"
+              )
+            );
           }
         }
 
-        const swapResult = await swapFromEvm(
+        const txReq = await getSwapFromEvmTxPayload(
           quote.details!,
           destinationAddress,
           params.options.deadlineInSeconds,
           undefined,
-          mayanEvmProvider(mayanSigner),
-          mayanSigner
+          originAddress,
+          toChainId(this.request.from.chain),
+          rpc
+        );
+        txReqs.push(
+          new EvmUnsignedTransaction(
+            txReq,
+            this.request.fromChain.network,
+            this.request.fromChain.chain as EvmChains,
+            "Execute Swap"
+          )
         );
 
-        txs.push({
-          chain: this.request.from.chain,
-          txid: swapResult.hash,
-        });
+        if (isSignOnlySigner(signer)) {
+          const signed = await signer.sign(txReqs);
+          const txids = await EvmPlatform.sendWait(
+            this.request.fromChain.chain,
+            rpc,
+            signed
+          );
+          txs.push(
+            ...txids.map((txid) => ({ chain: this.request.from.chain, txid }))
+          );
+        } else if (isSignAndSendSigner(signer)) {
+          const txids = await signer.signAndSend(txReqs);
+          txs.push(
+            ...txids.map((txid) => ({ chain: this.request.from.chain, txid }))
+          );
+        }
       }
 
       return {
