@@ -375,6 +375,8 @@ export class MayanRoute<N extends Network>
       // sleep for 1 second so we dont spam the endpoint
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
+
+    return receipt;
   }
 
   override transferUrl(txid: string): string {
