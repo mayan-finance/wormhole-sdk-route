@@ -1,6 +1,6 @@
 {
   "name": "@mayanfinance/wormhole-sdk-route",
-  "version": "0.0.2-beta.18",
+  "version": "0.0.2-beta.19",
   "license": "Apache-2.0",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
