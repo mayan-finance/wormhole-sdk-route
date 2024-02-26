@@ -264,6 +264,10 @@ export class MayanRoute<N extends Network>
         });
       } else {
         const txReqs: EvmUnsignedTransaction<N, EvmChains>[] = [];
+        const nativeChainId = nativeChainIds.networkChainToNativeChainId.get(
+          this.request.fromChain.network,
+          this.request.fromChain.chain
+        );
 
         if (!isNative(this.request.source.id.address)) {
           const tokenContract = EvmPlatform.getTokenImplementation(
@@ -285,7 +289,11 @@ export class MayanRoute<N extends Network>
             );
             txReqs.push(
               new EvmUnsignedTransaction(
-                txReq,
+                {
+                  from: signer.address(),
+                  chainId: nativeChainId as bigint,
+                  ...txReq,
+                },
                 this.request.fromChain.network,
                 this.request.fromChain.chain as EvmChains,
                 "Approve Allowance"
@@ -293,11 +301,6 @@ export class MayanRoute<N extends Network>
             );
           }
         }
-
-        const nativeChainId = nativeChainIds.networkChainToNativeChainId.get(
-          this.request.fromChain.network,
-          this.request.fromChain.chain
-        );
 
         const txReq = await getSwapFromEvmTxPayload(
           quote.details!,
@@ -310,7 +313,11 @@ export class MayanRoute<N extends Network>
         );
         txReqs.push(
           new EvmUnsignedTransaction(
-            txReq,
+            {
+              from: signer.address(),
+              chainId: nativeChainId,
+              ...txReq,
+            },
             this.request.fromChain.network,
             this.request.fromChain.chain as EvmChains,
             "Execute Swap"
