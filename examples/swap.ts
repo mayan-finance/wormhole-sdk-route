@@ -62,7 +62,7 @@ import { getStuff } from "./utils";
 
   // Specify the amount as a decimal string
   const transferParams = {
-    amount: "0.015",
+    amount: "0.040",
     options: bestRoute.getDefaultOptions(),
   };
 
@@ -73,15 +73,16 @@ import { getStuff } from "./utils";
   }
   console.log("Validated: ", validated);
 
-  try {
-    const quote = await bestRoute.quote(validated.params);
-    console.log("Quote: ", quote);
-  } catch (e) {
-    console.log("Error fetching quote: ", e);
+  const quote = await bestRoute.quote(validated.params);
+  console.log(quote);
+
+  if (!quote.success) {
+    console.error(`Error fetching a quote: ${quote.error.message}`);
+    return;
   }
 
   // initiate the transfer
-  const receipt = await bestRoute.initiate(sender.signer, validated.params);
+  const receipt = await bestRoute.initiate(sender.signer, quote);
   console.log("Initiated transfer with receipt: ", receipt);
 
   // track the transfer until the destination is initiated

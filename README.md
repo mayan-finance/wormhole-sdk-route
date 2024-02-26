@@ -1,21 +1,5 @@
 # Mayan Swap Route
 
-## Setup
+This package provides a Wormhole SDK `Route` for Mayan Swap, meant to be used with the [Router](https://github.com/wormhole-foundation/connect-sdk/blob/main/examples/src/router.ts) in the Wormhole SDK.
 
-(Temporary)
-
-```
-git submodule init
-git submodule update
-cd swap-sdk
-npm i
-npm run build
-cd -
-npm i
-```
-
-Build:
-
-```
-npm run build
-```
+See [`examples/swap.ts`](examples/swap.ts) for an example of how to use this Route.
