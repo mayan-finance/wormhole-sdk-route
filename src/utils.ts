@@ -23,9 +23,9 @@ import {
   routes,
   toChain,
   toNative,
-} from "@wormhole-foundation/connect-sdk";
-import { isEvmNativeSigner } from "@wormhole-foundation/connect-sdk-evm";
-import { SolanaUnsignedTransaction } from "@wormhole-foundation/connect-sdk-solana";
+} from "@wormhole-foundation/sdk-connect";
+import { isEvmNativeSigner } from "@wormhole-foundation/sdk-evm";
+import { SolanaUnsignedTransaction } from "@wormhole-foundation/sdk-solana";
 import axios from "axios";
 import { ethers } from "ethers";
 import tokenCache from "./tokens.json";
@@ -135,11 +135,12 @@ export function mayanEvmSigner(signer: Signer): ethers.Signer {
 export function mayanEvmProvider(signer: ethers.Signer) {
   return {
     getBlock: async function (): Promise<{ timestamp: number }> {
-      let block = await signer.provider!.getBlock('latest');
-      if (block === null) throw new Error('Failed to get latest Ethereum block');
+      let block = await signer.provider!.getBlock("latest");
+      if (block === null)
+        throw new Error("Failed to get latest Ethereum block");
       return block;
-    }
-  }
+    },
+  };
 }
 
 export enum MayanTransactionStatus {

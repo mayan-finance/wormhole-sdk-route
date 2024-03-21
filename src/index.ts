@@ -25,12 +25,12 @@ import {
   isSourceInitiated,
   nativeChainIds,
   routes,
-} from "@wormhole-foundation/connect-sdk";
+} from "@wormhole-foundation/sdk-connect";
 import {
   EvmChains,
   EvmPlatform,
   EvmUnsignedTransaction,
-} from "@wormhole-foundation/connect-sdk-evm";
+} from "@wormhole-foundation/sdk-evm";
 import {
   NATIVE_CONTRACT_ADDRESS,
   fetchTokensForChain,

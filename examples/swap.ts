@@ -5,9 +5,9 @@ import {
   TransferState,
   Wormhole,
   routes,
-} from "@wormhole-foundation/connect-sdk";
-import { EvmPlatform } from "@wormhole-foundation/connect-sdk-evm";
-import { SolanaPlatform } from "@wormhole-foundation/connect-sdk-solana";
+} from "@wormhole-foundation/sdk-connect";
+import { EvmPlatform } from "@wormhole-foundation/sdk-evm";
+import { SolanaPlatform } from "@wormhole-foundation/sdk-solana";
 import { MayanRoute } from "../src/index";
 
 import { getStuff } from "./utils";
@@ -19,19 +19,25 @@ import { getStuff } from "./utils";
   const sendChain = wh.getChain("Ethereum");
   const destChain = wh.getChain("Solana");
 
-  // Pull private keys from env for testing purposes
-  const sender = await getStuff(sendChain);
-  const receiver = await getStuff(destChain);
-
-  console.log(sender);
-  console.log(receiver);
-
   // Doing transaction of native ETH on Ethereum to native SOL on Solana
   const source = Wormhole.tokenId(sendChain.chain, "native");
   const destination = Wormhole.tokenId(destChain.chain, "native");
 
   // Create a new Wormhole route resolver, adding the Mayan route to the default list
   const resolver = wh.resolver([MayanRoute]);
+
+  // Show supported tokens
+  console.log(await resolver.supportedSourceTokens(sendChain));
+  console.log(
+    await resolver.supportedDestinationTokens(source, sendChain, destChain)
+  );
+
+  // Pull private keys from env for testing purposes
+  const sender = await getStuff(sendChain);
+  const receiver = await getStuff(destChain);
+
+  console.log(sender);
+  console.log(receiver);
 
   // Creating a transfer request fetches token details
   // since all routes will need to know about the tokens
