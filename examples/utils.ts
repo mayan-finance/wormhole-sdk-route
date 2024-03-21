@@ -5,11 +5,11 @@ import {
   Network,
   Signer,
   Wormhole,
-} from "@wormhole-foundation/connect-sdk";
+} from "@wormhole-foundation/sdk-connect";
 
 // Importing from src so we dont have to rebuild to see debug stuff in signer
-import { getEvmSignerForKey } from "@wormhole-foundation/connect-sdk-evm";
-import { getSolanaSignAndSendSigner } from "@wormhole-foundation/connect-sdk-solana";
+import { getEvmSignerForKey } from "@wormhole-foundation/sdk-evm";
+import { getSolanaSignAndSendSigner } from "@wormhole-foundation/sdk-solana";
 
 require("dotenv").config();
 
