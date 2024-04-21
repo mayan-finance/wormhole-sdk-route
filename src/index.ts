@@ -1,5 +1,6 @@
 import {
   Quote as MayanQuote,
+  QuoteParams,
   Token,
   addresses,
   fetchQuote,
@@ -159,7 +160,7 @@ export class MayanRoute<N extends Network>
   private async fetchQuote(params: Vp): Promise<MayanQuote> {
     const { from, to } = this.request;
 
-    const quoteOpts = {
+    const quoteOpts: QuoteParams = {
       amount: Number(params.amount),
       fromToken: this.sourceTokenAddress(),
       toToken: this.destTokenAddress(),
@@ -167,9 +168,12 @@ export class MayanRoute<N extends Network>
       toChain: toMayanChainName(to.chain),
       ...this.getDefaultOptions(),
       ...params.options,
+      slippageBps: 0,
     };
 
-    return await fetchQuote(quoteOpts);
+    const quote = await fetchQuote(quoteOpts);
+    // TODO: what?
+    return quote[0]!;
   }
 
   async quote(params: Vp): Promise<QR> {
@@ -250,18 +254,16 @@ export class MayanRoute<N extends Network>
       const rpc = await this.request.fromChain.getRpc();
       const txs: TransactionId[] = [];
       if (this.request.from.chain === "Solana") {
-        txs.push({
-          chain: "Solana",
-          txid: await swapFromSolana(
-            quote.details!,
-            originAddress,
-            destinationAddress,
-            params.options.deadlineInSeconds,
-            undefined,
-            mayanSolanaSigner(signer),
-            rpc
-          ),
-        });
+        const swapResult = await swapFromSolana(
+          quote.details!,
+          originAddress,
+          destinationAddress,
+          params.options.deadlineInSeconds,
+          undefined,
+          mayanSolanaSigner(signer),
+          rpc
+        );
+        txs.push({ chain: "Solana", txid: swapResult.signature });
       } else {
         const txReqs: EvmUnsignedTransaction<N, EvmChains>[] = [];
         const nativeChainId = nativeChainIds.networkChainToNativeChainId.get(
@@ -309,7 +311,8 @@ export class MayanRoute<N extends Network>
           undefined,
           originAddress,
           Number(nativeChainId!),
-          rpc
+          rpc,
+          undefined // permit?
         );
         txReqs.push(
           new EvmUnsignedTransaction(
