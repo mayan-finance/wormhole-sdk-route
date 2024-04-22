@@ -91,8 +91,9 @@ export async function fetchTokensForChain(chain: Chain): Promise<TokenId[]> {
   try {
     mayanTokens = await fetchTokenList(chainName);
   } catch (e) {
-    // @ts-ignore
-    mayanTokens = tokenCache[chainName];
+    mayanTokens = (tokenCache as Record<MayanChainName, MayanToken[]>)[
+      chainName
+    ];
   }
 
   const whTokens: TokenId[] = mayanTokens.map((mt: MayanToken): TokenId => {
@@ -110,6 +111,11 @@ export async function fetchTokensForChain(chain: Chain): Promise<TokenId[]> {
   return whTokens;
 }
 
+// https://solana-labs.github.io/solana-web3.js/classes/Transaction.html
+function isTransaction(tx: any): tx is Transaction {
+  return typeof (<Transaction>tx).verifySignatures === "function";
+}
+
 export function mayanSolanaSigner(signer: Signer): SolanaTransactionSigner {
   if (!isSignOnlySigner(signer))
     throw new Error("Signer must be a SignOnlySigner");
@@ -117,21 +123,16 @@ export function mayanSolanaSigner(signer: Signer): SolanaTransactionSigner {
   return async <T extends Transaction | VersionedTransaction>(
     tx: T
   ): Promise<T> => {
-    if (tx instanceof VersionedTransaction) {
-      return tx;
-    } else if (tx instanceof Transaction) {
-      const ust: SolanaUnsignedTransaction<"Mainnet"> = {
-        transaction: { transaction: tx },
-        description: "Mayan.InitiateSwap",
-        network: "Mainnet",
-        chain: "Solana",
-        parallelizable: false,
-      };
-      const signed = (await signer.sign([ust])) as Buffer[];
-      // @ts-ignore -- TODO typeguards?
-      return Transaction.from(signed[0]!);
-    }
-    throw new Error("Unsupported transaction type");
+    const ust: SolanaUnsignedTransaction<"Mainnet"> = {
+      transaction: { transaction: tx },
+      description: "Mayan.InitiateSwap",
+      network: "Mainnet",
+      chain: "Solana",
+      parallelizable: false,
+    };
+    const signed = (await signer.sign([ust])) as Buffer[];
+    if (isTransaction(tx)) return Transaction.from(signed[0]!) as T;
+    else return VersionedTransaction.deserialize(signed[0]!) as T;
   };
 }
 
