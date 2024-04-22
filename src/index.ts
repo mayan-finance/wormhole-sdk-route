@@ -50,7 +50,7 @@ export namespace MayanRoute {
     deadlineInSeconds: number;
   };
   export type NormalizedParams = {
-    slippagePercentage: number;
+    slippageBps: number;
   };
   export interface ValidatedParams
     extends routes.ValidatedTransferParams<Options> {
@@ -134,7 +134,7 @@ export class MayanRoute<N extends Network>
         params: {
           ...params,
           normalizedParams: {
-            slippagePercentage: params.options.slippage * 100,
+            slippageBps: params.options.slippage * 10000,
           },
         },
       } as Vr;
@@ -168,25 +168,18 @@ export class MayanRoute<N extends Network>
       toChain: toMayanChainName(to.chain),
       ...this.getDefaultOptions(),
       ...params.options,
-      slippageBps: 0,
+      slippageBps: params.normalizedParams.slippageBps,
     };
 
-    const quote = await fetchQuote(quoteOpts);
-    // TODO: what?
-    return quote[0]!;
+    const quotes = await fetchQuote(quoteOpts);
+    // Note: Only taking the first quote
+    return quotes[0]!;
   }
 
   async quote(params: Vp): Promise<QR> {
     try {
       const { from, to } = this.request;
-      const quote = await this.fetchQuote({
-        ...params,
-        options: {
-          ...params.options,
-          // overwrite slippage with mayan-normalized value
-          slippage: params.normalizedParams.slippagePercentage,
-        },
-      });
+      const quote = await this.fetchQuote(params);
 
       if (quote.effectiveAmountIn < quote.refundRelayerFee) {
         throw new Error(
