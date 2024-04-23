@@ -4,12 +4,13 @@ import {
   SolanaTransactionSigner,
   fetchTokenList,
 } from "@mayanfinance/swap-sdk";
-import { Transaction } from "@solana/web3.js";
+import { Transaction, VersionedTransaction } from "@solana/web3.js";
 import {
   AttestationReceipt,
   Chain,
   CompletedTransferReceipt,
   FailedTransferReceipt,
+  RedeemedTransferReceipt,
   Signer,
   SourceFinalizedTransferReceipt,
   SourceInitiatedTransferReceipt,
@@ -90,7 +91,9 @@ export async function fetchTokensForChain(chain: Chain): Promise<TokenId[]> {
   try {
     mayanTokens = await fetchTokenList(chainName);
   } catch (e) {
-    mayanTokens = tokenCache[chainName];
+    mayanTokens = (tokenCache as Record<MayanChainName, MayanToken[]>)[
+      chainName
+    ];
   }
 
   const whTokens: TokenId[] = mayanTokens.map((mt: MayanToken): TokenId => {
@@ -108,11 +111,18 @@ export async function fetchTokensForChain(chain: Chain): Promise<TokenId[]> {
   return whTokens;
 }
 
+// https://solana-labs.github.io/solana-web3.js/classes/Transaction.html
+function isTransaction(tx: any): tx is Transaction {
+  return typeof (<Transaction>tx).verifySignatures === "function";
+}
+
 export function mayanSolanaSigner(signer: Signer): SolanaTransactionSigner {
   if (!isSignOnlySigner(signer))
     throw new Error("Signer must be a SignOnlySigner");
 
-  return async (tx: Transaction) => {
+  return async <T extends Transaction | VersionedTransaction>(
+    tx: T
+  ): Promise<T> => {
     const ust: SolanaUnsignedTransaction<"Mainnet"> = {
       transaction: { transaction: tx },
       description: "Mayan.InitiateSwap",
@@ -121,7 +131,8 @@ export function mayanSolanaSigner(signer: Signer): SolanaTransactionSigner {
       parallelizable: false,
     };
     const signed = (await signer.sign([ust])) as Buffer[];
-    return Transaction.from(signed[0]!);
+    if (isTransaction(tx)) return Transaction.from(signed[0]!) as T;
+    else return VersionedTransaction.deserialize(signed[0]!) as T;
   };
 }
 
@@ -326,8 +337,9 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
       };
     });
 
-  const attestations: { [key: string]: AttestationReceipt<"WormholeCore"> } =
-    {};
+  const attestations: {
+    [key: string]: Required<AttestationReceipt<"WormholeCore">>;
+  } = {};
   for (const vaaType of possibleVaaTypes) {
     const key = `${vaaType}SignedVaa`;
     if (key in txStatus && txStatus[key as keyof TransactionStatus] !== null) {
@@ -372,12 +384,12 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
           originTxs,
           destinationTxs,
           state,
-          attestation: attestations["redeem"],
-        } satisfies CompletedTransferReceipt<
-          AttestationReceipt<"WormholeCore">
-        >;
+          attestation: attestations["redeem"]!,
+        } satisfies RedeemedTransferReceipt<AttestationReceipt<"WormholeCore">>;
       }
+      break;
 
+    case TransferState.DestinationFinalized:
       // Initial transfer vaa from orgin chain
       if ("transfer" in attestations && attestations["transfer"]) {
         return {

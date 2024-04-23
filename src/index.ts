@@ -1,5 +1,6 @@
 import {
   Quote as MayanQuote,
+  QuoteParams,
   Token,
   addresses,
   fetchQuote,
@@ -49,7 +50,7 @@ export namespace MayanRoute {
     deadlineInSeconds: number;
   };
   export type NormalizedParams = {
-    slippagePercentage: number;
+    slippageBps: number;
   };
   export interface ValidatedParams
     extends routes.ValidatedTransferParams<Options> {
@@ -133,7 +134,7 @@ export class MayanRoute<N extends Network>
         params: {
           ...params,
           normalizedParams: {
-            slippagePercentage: params.options.slippage * 100,
+            slippageBps: params.options.slippage * 10000,
           },
         },
       } as Vr;
@@ -159,7 +160,7 @@ export class MayanRoute<N extends Network>
   private async fetchQuote(params: Vp): Promise<MayanQuote> {
     const { from, to } = this.request;
 
-    const quoteOpts = {
+    const quoteOpts: QuoteParams = {
       amount: Number(params.amount),
       fromToken: this.sourceTokenAddress(),
       toToken: this.destTokenAddress(),
@@ -167,22 +168,18 @@ export class MayanRoute<N extends Network>
       toChain: toMayanChainName(to.chain),
       ...this.getDefaultOptions(),
       ...params.options,
+      slippageBps: params.normalizedParams.slippageBps,
     };
 
-    return await fetchQuote(quoteOpts);
+    const quotes = await fetchQuote(quoteOpts);
+    // Note: Only taking the first quote
+    return quotes[0]!;
   }
 
   async quote(params: Vp): Promise<QR> {
     try {
       const { from, to } = this.request;
-      const quote = await this.fetchQuote({
-        ...params,
-        options: {
-          ...params.options,
-          // overwrite slippage with mayan-normalized value
-          slippage: params.normalizedParams.slippagePercentage,
-        },
-      });
+      const quote = await this.fetchQuote(params);
 
       if (quote.effectiveAmountIn < quote.refundRelayerFee) {
         throw new Error(
@@ -250,18 +247,16 @@ export class MayanRoute<N extends Network>
       const rpc = await this.request.fromChain.getRpc();
       const txs: TransactionId[] = [];
       if (this.request.from.chain === "Solana") {
-        txs.push({
-          chain: "Solana",
-          txid: await swapFromSolana(
-            quote.details!,
-            originAddress,
-            destinationAddress,
-            params.options.deadlineInSeconds,
-            undefined,
-            mayanSolanaSigner(signer),
-            rpc
-          ),
-        });
+        const swapResult = await swapFromSolana(
+          quote.details!,
+          originAddress,
+          destinationAddress,
+          params.options.deadlineInSeconds,
+          undefined,
+          mayanSolanaSigner(signer),
+          rpc
+        );
+        txs.push({ chain: "Solana", txid: swapResult.signature });
       } else {
         const txReqs: EvmUnsignedTransaction<N, EvmChains>[] = [];
         const nativeChainId = nativeChainIds.networkChainToNativeChainId.get(
@@ -309,7 +304,8 @@ export class MayanRoute<N extends Network>
           undefined,
           originAddress,
           Number(nativeChainId!),
-          rpc
+          rpc,
+          undefined // permit?
         );
         txReqs.push(
           new EvmUnsignedTransaction(

@@ -43,9 +43,7 @@ export async function getStuff<N extends Network, C extends Chain>(
       signer = await getSolanaSignAndSendSigner(
         await chain.getRpc(),
         getEnv("SOL_PRIVATE_KEY"),
-        {
-          computeLimit: 500_000n,
-        }
+        { priorityFeePercentile: 0.9 }
       );
       break;
     case "Evm":
