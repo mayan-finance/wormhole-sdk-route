@@ -270,16 +270,20 @@ export class MayanRoute<N extends Network>
             this.sourceTokenAddress()
           );
 
+          const contractAddress = quote.type.toLowerCase() === 'wh' ?
+            addresses.MAYAN_EVM_CONTRACT :
+            addresses.MAYAN_FORWARDER_CONTRACT
+
           const allowance = await tokenContract.allowance(
             canonicalAddress(this.request.from),
-            addresses.MAYAN_FORWARDER_CONTRACT
+            contractAddress
           );
 
           const amt = amount.units(quote.sourceToken.amount);
           if (allowance < amt) {
             const txReq = await tokenContract.approve.populateTransaction(
               // mayan contract address,
-              addresses.MAYAN_FORWARDER_CONTRACT,
+              contractAddress,
               amt
             );
             txReqs.push(
