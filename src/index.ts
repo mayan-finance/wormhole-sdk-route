@@ -304,7 +304,7 @@ export class MayanRoute<N extends Network>
           undefined,
           originAddress,
           Number(nativeChainId!),
-          rpc,
+          undefined,
           undefined // permit?
         );
         txReqs.push(
