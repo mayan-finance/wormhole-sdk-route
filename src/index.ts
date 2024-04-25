@@ -270,7 +270,7 @@ export class MayanRoute<N extends Network>
             this.sourceTokenAddress()
           );
 
-          const contractAddress = quote.type.toLowerCase() === 'wh' ?
+          const contractAddress = quote.details!.type.toLowerCase() === 'wh' ?
             addresses.MAYAN_EVM_CONTRACT :
             addresses.MAYAN_FORWARDER_CONTRACT
 
