@@ -64,6 +64,8 @@ const chainNameMap = {
   Avalanche: "avalanche",
   Arbitrum: "arbitrum",
   Aptos: "aptos",
+  Base: "base",
+  Optimism: "optimism",
 } as Record<Chain, MayanChainName>;
 
 export function toMayanChainName(chain: Chain): MayanChainName {
