@@ -9,6 +9,7 @@ import {
 } from "@mayanfinance/swap-sdk";
 import {
   Chain,
+  ChainAddress,
   ChainContext,
   Network,
   Signer,
@@ -85,7 +86,7 @@ export class MayanRoute<N extends Network>
     return {
       gasDrop: 0,
       slippage: 0.05,
-      deadlineInSeconds: getDefaultDeadline(this.request.from.chain),
+      deadlineInSeconds: getDefaultDeadline(this.request.fromChain.chain),
     };
   }
 
@@ -158,14 +159,14 @@ export class MayanRoute<N extends Network>
   }
 
   private async fetchQuote(params: Vp): Promise<MayanQuote> {
-    const { from, to } = this.request;
+    const { fromChain, toChain } = this.request;
 
     const quoteOpts: QuoteParams = {
       amount: Number(params.amount),
       fromToken: this.sourceTokenAddress(),
       toToken: this.destTokenAddress(),
-      fromChain: toMayanChainName(from.chain),
-      toChain: toMayanChainName(to.chain),
+      fromChain: toMayanChainName(fromChain.chain),
+      toChain: toMayanChainName(toChain.chain),
       ...this.getDefaultOptions(),
       ...params.options,
       slippageBps: params.normalizedParams.slippageBps,
@@ -178,7 +179,7 @@ export class MayanRoute<N extends Network>
 
   async quote(params: Vp): Promise<QR> {
     try {
-      const { from, to } = this.request;
+      const { fromChain, toChain } = this.request;
       const quote = await this.fetchQuote(params);
 
       if (quote.effectiveAmountIn < quote.refundRelayerFee) {
@@ -191,14 +192,17 @@ export class MayanRoute<N extends Network>
       const relayFee =
         quote.fromChain !== "solana"
           ? {
-              token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
+              token: Wormhole.tokenId(
+                fromChain.chain,
+                this.sourceTokenAddress()
+              ),
               amount: amount.parse(
                 amount.denoise(quote.swapRelayerFee, quote.fromToken.decimals),
                 quote.fromToken.decimals
               ),
             }
           : {
-              token: Wormhole.tokenId(to.chain, this.destTokenAddress()),
+              token: Wormhole.tokenId(toChain.chain, this.destTokenAddress()),
               amount: amount.parse(
                 amount.denoise(quote.redeemRelayerFee, quote.toToken.decimals),
                 quote.toToken.decimals
@@ -209,14 +213,14 @@ export class MayanRoute<N extends Network>
         success: true,
         params,
         sourceToken: {
-          token: Wormhole.tokenId(from.chain, this.sourceTokenAddress()),
+          token: Wormhole.tokenId(fromChain.chain, this.sourceTokenAddress()),
           amount: amount.parse(
             amount.denoise(quote.effectiveAmountIn, quote.fromToken.decimals),
             quote.fromToken.decimals
           ),
         },
         destinationToken: {
-          token: Wormhole.tokenId(to.chain, this.destTokenAddress()),
+          token: Wormhole.tokenId(toChain.chain, this.destTokenAddress()),
           amount: amount.parse(
             amount.denoise(quote.expectedAmountOut, quote.toToken.decimals),
             quote.toToken.decimals
@@ -238,15 +242,15 @@ export class MayanRoute<N extends Network>
     }
   }
 
-  async initiate(signer: Signer<N>, quote: Q) {
+  async initiate(signer: Signer<N>, quote: Q, to: ChainAddress) {
     const { params } = quote;
-    const originAddress = canonicalAddress(this.request.from);
-    const destinationAddress = canonicalAddress(this.request.to);
+    const originAddress = signer.address();
+    const destinationAddress = canonicalAddress(to);
 
     try {
       const rpc = await this.request.fromChain.getRpc();
       const txs: TransactionId[] = [];
-      if (this.request.from.chain === "Solana") {
+      if (this.request.fromChain.chain === "Solana") {
         const swapResult = await swapFromSolana(
           quote.details!,
           originAddress,
@@ -270,12 +274,13 @@ export class MayanRoute<N extends Network>
             this.sourceTokenAddress()
           );
 
-          const contractAddress = quote.details!.type.toLowerCase() === 'wh' ?
-            addresses.MAYAN_EVM_CONTRACT :
-            addresses.MAYAN_FORWARDER_CONTRACT
+          const contractAddress =
+            quote.details!.type.toLowerCase() === "wh"
+              ? addresses.MAYAN_EVM_CONTRACT
+              : addresses.MAYAN_FORWARDER_CONTRACT;
 
           const allowance = await tokenContract.allowance(
-            canonicalAddress(this.request.from),
+            originAddress,
             contractAddress
           );
 
@@ -332,19 +337,25 @@ export class MayanRoute<N extends Network>
             signed
           );
           txs.push(
-            ...txids.map((txid) => ({ chain: this.request.from.chain, txid }))
+            ...txids.map((txid) => ({
+              chain: this.request.fromChain.chain,
+              txid,
+            }))
           );
         } else if (isSignAndSendSigner(signer)) {
           const txids = await signer.signAndSend(txReqs);
           txs.push(
-            ...txids.map((txid) => ({ chain: this.request.from.chain, txid }))
+            ...txids.map((txid) => ({
+              chain: this.request.fromChain.chain,
+              txid,
+            }))
           );
         }
       }
 
       return {
-        from: this.request.from.chain,
-        to: this.request.to.chain,
+        from: this.request.fromChain.chain,
+        to: this.request.toChain.chain,
         state: TransferState.SourceInitiated,
         originTxs: txs,
       } satisfies SourceInitiatedTransferReceipt;
