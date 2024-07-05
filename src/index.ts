@@ -37,7 +37,6 @@ import {
 import {
   NATIVE_CONTRACT_ADDRESS,
   fetchTokensForChain,
-  getDefaultDeadline,
   getTransactionStatus,
   mayanSolanaSigner,
   supportedChains,
@@ -49,7 +48,6 @@ export namespace MayanRoute {
   export type Options = {
     gasDrop: number;
     slippage: number;
-    deadlineInSeconds: number;
   };
   export type NormalizedParams = {
     slippageBps: number;
@@ -73,7 +71,6 @@ export class MayanRoute<N extends Network>
   extends routes.AutomaticRoute<N, Op, Vp, R>
   implements routes.StaticRouteMethods<typeof MayanRoute>
 {
-  MIN_DEADLINE = 60;
   MAX_SLIPPAGE = 1;
 
   NATIVE_GAS_DROPOFF_SUPPORTED = true;
@@ -87,7 +84,6 @@ export class MayanRoute<N extends Network>
     return {
       gasDrop: 0,
       slippage: 0.05,
-      deadlineInSeconds: getDefaultDeadline(this.request.fromChain.chain),
     };
   }
 
@@ -128,8 +124,6 @@ export class MayanRoute<N extends Network>
 
       if (params.options.slippage > this.MAX_SLIPPAGE)
         throw new Error("Slippage must be less than 100%");
-      if (params.options.deadlineInSeconds < this.MIN_DEADLINE)
-        throw new Error("Deadline must be at least 60 seconds");
 
       return {
         valid: true,
