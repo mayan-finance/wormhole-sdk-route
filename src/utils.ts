@@ -10,7 +10,6 @@ import {
   Chain,
   CompletedTransferReceipt,
   FailedTransferReceipt,
-  RedeemedTransferReceipt,
   Signer,
   SourceFinalizedTransferReceipt,
   SourceInitiatedTransferReceipt,
@@ -378,28 +377,26 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
       break;
 
     case TransferState.DestinationInitiated:
-      // VAA to be redeemed on dest chain
       if ("redeem" in attestations && attestations["redeem"]) {
         return {
           from: srcChain,
           to: dstChain,
           originTxs,
           destinationTxs,
-          state,
+          state: TransferState.DestinationFinalized,
           attestation: attestations["redeem"]!,
-        } satisfies RedeemedTransferReceipt<AttestationReceipt<"WormholeCore">>;
+        } satisfies CompletedTransferReceipt<
+          AttestationReceipt<"WormholeCore">
+        >;
       }
-      break;
 
-    case TransferState.DestinationFinalized:
-      // Initial transfer vaa from orgin chain
       if ("transfer" in attestations && attestations["transfer"]) {
         return {
           from: srcChain,
           to: dstChain,
           originTxs,
           destinationTxs,
-          state,
+          state: TransferState.DestinationFinalized,
           attestation: attestations["transfer"],
         } satisfies CompletedTransferReceipt<
           AttestationReceipt<"WormholeCore">

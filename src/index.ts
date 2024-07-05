@@ -2,7 +2,6 @@ import {
   Quote as MayanQuote,
   QuoteParams,
   ReferrerAddresses,
-  Token,
   addresses,
   fetchQuote,
   getSwapFromEvmTxPayload,
@@ -21,10 +20,13 @@ import {
   Wormhole,
   amount,
   canonicalAddress,
+  isAttested,
   isCompleted,
   isNative,
+  isRedeemed,
   isSignAndSendSigner,
   isSignOnlySigner,
+  isSourceFinalized,
   isSourceInitiated,
   nativeChainIds,
   routes,
@@ -74,7 +76,6 @@ export class MayanRoute<N extends Network>
   MAX_SLIPPAGE = 1;
 
   NATIVE_GAS_DROPOFF_SUPPORTED = true;
-  tokenList?: Token[];
 
   static meta = {
     name: "MayanSwap",
@@ -359,22 +360,31 @@ export class MayanRoute<N extends Network>
   }
 
   public override async *track(receipt: R, timeout?: number) {
+    if (isCompleted(receipt) || isRedeemed(receipt)) return receipt;
+
     // What should be the default if no timeout is provided?
     let leftover = timeout ? timeout : 60 * 60 * 1000;
     while (leftover > 0) {
       const start = Date.now();
-      if (!isSourceInitiated(receipt))
-        throw new Error("Transfer not initiated");
 
-      const txstatus = await getTransactionStatus(
-        receipt.originTxs[receipt.originTxs.length - 1]!
-      );
+      if (
+        // this is awkward but there is not hasSourceInitiated like fn in sdk (todo)
+        isSourceInitiated(receipt) ||
+        isSourceFinalized(receipt) ||
+        isAttested(receipt)
+      ) {
+        const txstatus = await getTransactionStatus(
+          receipt.originTxs[receipt.originTxs.length - 1]!
+        );
 
-      if (txstatus) {
-        receipt = txStatusToReceipt(txstatus);
-        yield { ...receipt, txstatus };
+        if (txstatus) {
+          receipt = txStatusToReceipt(txstatus);
+          yield { ...receipt, txstatus };
 
-        if (isCompleted(receipt)) return receipt;
+          if (isCompleted(receipt) || isRedeemed(receipt)) return receipt;
+        }
+      } else {
+        throw new Error("Transfer must have been initiated");
       }
 
       // sleep for 1 second so we dont spam the endpoint

@@ -46,15 +46,10 @@ import { getStuff } from "./utils";
 
   // Creating a transfer request fetches token details
   // since all routes will need to know about the tokens
-  const tr = await routes.RouteTransferRequest.create(
-    wh,
-    {
-      source,
-      destination,
-    },
-    sendChain,
-    destChain
-  );
+  const tr = await routes.RouteTransferRequest.create(wh, {
+    source,
+    destination,
+  });
 
   // resolve the transfer request to a set of routes that can perform it
   const foundRoutes = await resolver.findRoutes(tr);
