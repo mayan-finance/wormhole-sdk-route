@@ -1,20 +1,19 @@
-import { Network, Wormhole, routes } from "@wormhole-foundation/sdk-connect";
+import { Wormhole, routes } from "@wormhole-foundation/sdk-connect";
 import { EvmPlatform } from "@wormhole-foundation/sdk-evm";
 import { SolanaPlatform } from "@wormhole-foundation/sdk-solana";
 import { MayanRoute } from "../src/index";
 
-import { ReferrerAddresses } from "@mayanfinance/swap-sdk";
 import { getStuff } from "./utils";
 
 // To pass a ReferrerAddress to the initiation functions,
 // create a class that extends the MayanRoute class with
 // an override of the referrerAddress method, returning the addresses
 // by (mayan) platform
-class MayanRefRoute<N extends Network> extends MayanRoute<N> {
-  override referrerAddress(): ReferrerAddresses | undefined {
-    return { evm: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbe" };
-  }
-}
+// class MayanRefRoute<N extends Network> extends MayanRoute<N> {
+//   override referrerAddress(): ReferrerAddresses | undefined {
+//     return { evm: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbe" };
+//   }
+// }
 
 (async function () {
   // Setup
@@ -28,20 +27,22 @@ class MayanRefRoute<N extends Network> extends MayanRoute<N> {
   const destination = Wormhole.tokenId(destChain.chain, "native");
 
   // Create a new Wormhole route resolver, adding the Mayan route to the default list
-  const resolver = wh.resolver([MayanRefRoute]);
+  const resolver = wh.resolver([MayanRoute]);
 
   // Show supported tokens
-  console.log(await resolver.supportedSourceTokens(sendChain));
-  console.log(
-    await resolver.supportedDestinationTokens(source, sendChain, destChain)
+  const srcTokens = await resolver.supportedSourceTokens(sendChain);
+  console.log(srcTokens.slice(0, 5));
+
+  const dstTokens = await resolver.supportedDestinationTokens(
+    source,
+    sendChain,
+    destChain
   );
+  console.log(dstTokens.slice(0, 5));
 
   // Pull private keys from env for testing purposes
   const sender = await getStuff(sendChain);
   const receiver = await getStuff(destChain);
-
-  console.log(sender);
-  console.log(receiver);
 
   // Creating a transfer request fetches token details
   // since all routes will need to know about the tokens
@@ -66,7 +67,7 @@ class MayanRefRoute<N extends Network> extends MayanRoute<N> {
 
   // Specify the amount as a decimal string
   const transferParams = {
-    amount: "0.040",
+    amount: "0.04",
     options: bestRoute.getDefaultOptions(),
   };
 
@@ -78,12 +79,11 @@ class MayanRefRoute<N extends Network> extends MayanRoute<N> {
   console.log("Validated: ", validated);
 
   const quote = await bestRoute.quote(validated.params);
-  console.log(quote);
-
   if (!quote.success) {
     console.error(`Error fetching a quote: ${quote.error.message}`);
     return;
   }
+  console.log("Quote: ", quote);
 
   // initiate the transfer
   const receipt = await bestRoute.initiate(

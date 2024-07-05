@@ -9,7 +9,7 @@ import {
 
 // Importing from src so we dont have to rebuild to see debug stuff in signer
 import { getEvmSignerForKey } from "@wormhole-foundation/sdk-evm";
-import { getSolanaSignAndSendSigner } from "@wormhole-foundation/sdk-solana";
+import { getSolanaSigner } from "@wormhole-foundation/sdk-solana";
 
 require("dotenv").config();
 
@@ -40,9 +40,9 @@ export async function getStuff<N extends Network, C extends Chain>(
   const platform = chain.platform.utils()._platform;
   switch (platform) {
     case "Solana":
-      signer = await getSolanaSignAndSendSigner(
+      signer = await getSolanaSigner(
         await chain.getRpc(),
-        getEnv("SOL_PRIVATE_KEY")
+        getEnv("MAINNET_SOL_PRIVATE_KEY")
       );
       break;
     case "Evm":
