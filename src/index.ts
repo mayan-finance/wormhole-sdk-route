@@ -147,21 +147,21 @@ export class MayanRoute<N extends Network>
     }
   }
 
-  protected destTokenAddress(): string {
+  private destTokenAddress(): string {
     const { destination } = this.request;
     return destination && !isNative(destination.id.address)
       ? canonicalAddress(destination.id)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  protected sourceTokenAddress(): string {
+  private sourceTokenAddress(): string {
     const { source } = this.request;
     return !isNative(source.id.address)
       ? canonicalAddress(source.id)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  protected async fetchQuote(params: Vp): Promise<MayanQuote> {
+  private async fetchQuote(params: Vp): Promise<MayanQuote> {
     const { fromChain, toChain } = this.request;
 
     const quoteOpts: QuoteParams = {
