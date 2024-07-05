@@ -1,18 +1,10 @@
-import {
-  AttestationReceipt,
-  Network,
-  ProtocolName,
-  TransferReceipt,
-  TransferState,
-  Wormhole,
-  routes,
-} from "@wormhole-foundation/sdk-connect";
+import { Network, Wormhole, routes } from "@wormhole-foundation/sdk-connect";
 import { EvmPlatform } from "@wormhole-foundation/sdk-evm";
 import { SolanaPlatform } from "@wormhole-foundation/sdk-solana";
 import { MayanRoute } from "../src/index";
 
-import { getStuff } from "./utils";
 import { ReferrerAddresses } from "@mayanfinance/swap-sdk";
+import { getStuff } from "./utils";
 
 // To pass a ReferrerAddress to the initiation functions,
 // create a class that extends the MayanRoute class with
@@ -20,7 +12,7 @@ import { ReferrerAddresses } from "@mayanfinance/swap-sdk";
 // by (mayan) platform
 class MayanRefRoute<N extends Network> extends MayanRoute<N> {
   override referrerAddress(): ReferrerAddresses | undefined {
-    return { evm: "0x49887A216375FDED17DC1aAAD4920c3777265614" };
+    return { evm: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbe" };
   }
 }
 
@@ -70,9 +62,6 @@ class MayanRefRoute<N extends Network> extends MayanRoute<N> {
     foundRoutes
   );
 
-  // Sort the routes given some input (not required for mvp)
-  // const bestRoute = (await resolver.sortRoutes(foundRoutes, "cost"))[0]!;
-  //const bestRoute = foundRoutes.filter((route) => routes.isAutomatic(route))[0]!;
   const bestRoute = foundRoutes[0]!;
 
   // Specify the amount as a decimal string
@@ -104,36 +93,10 @@ class MayanRefRoute<N extends Network> extends MayanRoute<N> {
   );
   console.log("Initiated transfer with receipt: ", receipt);
 
-  // track the transfer until the destination is initiated
-  const checkAndComplete = async (
-    receipt: TransferReceipt<AttestationReceipt<ProtocolName>>
-  ) => {
-    console.log("Checking transfer state...");
-    // overwrite receipt var
-    for await (receipt of bestRoute.track(receipt, 120 * 1000)) {
-      console.log("Transfer State:", TransferState[receipt.state]);
-    }
-
-    // gucci
-    if (receipt.state >= TransferState.DestinationFinalized) return;
-
-    // if the route is one we need to complete, do it
-    if (receipt.state === TransferState.Attested) {
-      if (routes.isManual(bestRoute)) {
-        const completedTxids = await bestRoute.complete(
-          receiver.signer,
-          receipt
-        );
-        console.log("Completed transfer with txids: ", completedTxids);
-        return;
-      }
-    }
-
-    // give it time to breath and try again
-    const wait = 2 * 1000;
-    console.log(`Transfer not complete, trying again in a ${wait}ms...`);
-    setTimeout(() => checkAndComplete(receipt), wait);
-  };
-
-  await checkAndComplete(receipt);
+  await routes.checkAndCompleteTransfer(
+    bestRoute,
+    receipt,
+    receiver.signer,
+    15 * 60 * 1000
+  );
 })();
