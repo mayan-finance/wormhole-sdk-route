@@ -168,7 +168,9 @@ export class MayanRoute<N extends Network>
     };
 
     const quotes = await fetchQuote(quoteOpts);
-    // Note: Only taking the first quote
+    if (quotes.length === 0) throw new Error("Failed to find quotes");
+
+    // Note: Quotes are sorted by best price
     return quotes[0]!;
   }
 
