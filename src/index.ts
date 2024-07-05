@@ -1,6 +1,7 @@
 import {
   Quote as MayanQuote,
   QuoteParams,
+  ReferrerAddresses,
   Token,
   addresses,
   fetchQuote,
@@ -78,6 +79,8 @@ export class MayanRoute<N extends Network>
   NATIVE_GAS_DROPOFF_SUPPORTED = true;
   tokenList?: Token[];
 
+  referrer: ReferrerAddresses | undefined = undefined;
+
   static meta = {
     name: "MayanSwap",
   };
@@ -144,21 +147,21 @@ export class MayanRoute<N extends Network>
     }
   }
 
-  private destTokenAddress(): string {
+  protected destTokenAddress(): string {
     const { destination } = this.request;
     return destination && !isNative(destination.id.address)
       ? canonicalAddress(destination.id)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  private sourceTokenAddress(): string {
+  protected sourceTokenAddress(): string {
     const { source } = this.request;
     return !isNative(source.id.address)
       ? canonicalAddress(source.id)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  private async fetchQuote(params: Vp): Promise<MayanQuote> {
+  protected async fetchQuote(params: Vp): Promise<MayanQuote> {
     const { fromChain, toChain } = this.request;
 
     const quoteOpts: QuoteParams = {
@@ -243,7 +246,6 @@ export class MayanRoute<N extends Network>
   }
 
   async initiate(signer: Signer<N>, quote: Q, to: ChainAddress) {
-    const { params } = quote;
     const originAddress = signer.address();
     const destinationAddress = canonicalAddress(to);
 
@@ -255,8 +257,7 @@ export class MayanRoute<N extends Network>
           quote.details!,
           originAddress,
           destinationAddress,
-          params.options.deadlineInSeconds,
-          undefined,
+          this.referrer,
           mayanSolanaSigner(signer),
           rpc
         );
@@ -274,10 +275,7 @@ export class MayanRoute<N extends Network>
             this.sourceTokenAddress()
           );
 
-          const contractAddress =
-            quote.details!.type.toLowerCase() === "wh"
-              ? addresses.MAYAN_EVM_CONTRACT
-              : addresses.MAYAN_FORWARDER_CONTRACT;
+          const contractAddress = addresses.MAYAN_FORWARDER_CONTRACT;
 
           const allowance = await tokenContract.allowance(
             originAddress,
@@ -306,16 +304,17 @@ export class MayanRoute<N extends Network>
           }
         }
 
-        const txReq = await getSwapFromEvmTxPayload(
+        const txReq = getSwapFromEvmTxPayload(
           quote.details!,
+          originAddress,
           destinationAddress,
-          params.options.deadlineInSeconds,
-          undefined,
+          this.referrer,
           originAddress,
           Number(nativeChainId!),
           undefined,
           undefined // permit?
         );
+
         txReqs.push(
           new EvmUnsignedTransaction(
             {
@@ -395,4 +394,15 @@ export class MayanRoute<N extends Network>
   override transferUrl(txid: string): string {
     return `https://explorer.mayan.finance/swap/${txid}`;
   }
+}
+
+export function referrerMayanRoute(
+  route: MayanRoute<Network>,
+  referrer: {
+    Evm?: string;
+    Solana?: string;
+  }
+) {
+  route.referrer = { evm: referrer.Evm ?? null, solana: referrer.Evm ?? null };
+  return route;
 }

@@ -41,18 +41,15 @@ import { getStuff } from "./utils";
 
   // Creating a transfer request fetches token details
   // since all routes will need to know about the tokens
-  const tr = await routes.RouteTransferRequest.create(wh, {
-    from: Wormhole.chainAddress(
-      sendChain.chain,
-      sender.address.address.toString()
-    ),
-    to: Wormhole.chainAddress(
-      destChain.chain,
-      receiver.address.address.toString()
-    ),
-    source,
-    destination,
-  });
+  const tr = await routes.RouteTransferRequest.create(
+    wh,
+    {
+      source,
+      destination,
+    },
+    sendChain,
+    destChain
+  );
 
   // resolve the transfer request to a set of routes that can perform it
   const foundRoutes = await resolver.findRoutes(tr);
@@ -88,7 +85,11 @@ import { getStuff } from "./utils";
   }
 
   // initiate the transfer
-  const receipt = await bestRoute.initiate(sender.signer, quote);
+  const receipt = await bestRoute.initiate(
+    sender.signer,
+    quote,
+    receiver.address
+  );
   console.log("Initiated transfer with receipt: ", receipt);
 
   // track the transfer until the destination is initiated
