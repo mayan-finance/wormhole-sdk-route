@@ -10,6 +10,7 @@ import {
   Chain,
   CompletedTransferReceipt,
   FailedTransferReceipt,
+  RedeemedTransferReceipt,
   Signer,
   SourceFinalizedTransferReceipt,
   SourceInitiatedTransferReceipt,
@@ -155,6 +156,12 @@ export function mayanEvmProvider(signer: ethers.Signer) {
   };
 }
 
+export enum MayanClientStatus {
+  INPROGRESS = "INPROGRESS",
+  COMPLETED = "COMPLETED",
+  REFUNDED = "REFUNDED",
+}
+
 export enum MayanTransactionStatus {
   SETTLED_ON_SOLANA = "SETTLED_ON_SOLANA",
   REDEEMED_ON_EVM = "REDEEMED_ON_EVM",
@@ -298,6 +305,8 @@ export interface TransactionStatus {
   toTokenScannerUrl: string;
 
   txs: Tx[];
+
+  clientStatus: MayanClientStatus;
 }
 
 export interface Tx {
@@ -377,33 +386,34 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
       break;
 
     case TransferState.DestinationInitiated:
-      if ("redeem" in attestations && attestations["redeem"]) {
+      const attestation =
+        "redeem" in attestations && attestations["redeem"]
+          ? attestations["redeem"]
+          : attestations["transfer"];
+
+      if (!attestation) break;
+
+      if (txStatus.clientStatus === MayanClientStatus.COMPLETED) {
         return {
           from: srcChain,
           to: dstChain,
           originTxs,
           destinationTxs,
           state: TransferState.DestinationFinalized,
-          attestation: attestations["redeem"]!,
+          attestation,
         } satisfies CompletedTransferReceipt<
           AttestationReceipt<"WormholeCore">
         >;
       }
 
-      if ("transfer" in attestations && attestations["transfer"]) {
-        return {
-          from: srcChain,
-          to: dstChain,
-          originTxs,
-          destinationTxs,
-          state: TransferState.DestinationFinalized,
-          attestation: attestations["transfer"],
-        } satisfies CompletedTransferReceipt<
-          AttestationReceipt<"WormholeCore">
-        >;
-      }
-
-      break;
+      return {
+        from: srcChain,
+        to: dstChain,
+        originTxs,
+        destinationTxs,
+        state: TransferState.DestinationInitiated,
+        attestation,
+      } satisfies RedeemedTransferReceipt<AttestationReceipt<"WormholeCore">>;
 
     case TransferState.Failed:
       // VAA that is used to refund on source chain

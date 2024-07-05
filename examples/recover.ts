@@ -1,6 +1,5 @@
 import {
   routes,
-  TransferReceipt,
   TransferState,
   Wormhole,
 } from "@wormhole-foundation/sdk-connect";
@@ -28,16 +27,15 @@ import { MayanRoute } from "../src/index";
   const txid =
     "5KhCLcb3WphH5Ncb8jw7XLFg5qLC8B8Ri7XBPZhxXDtYSqEcpXYKbGASZfmdZzAHuamW6UZEokCydEuQ7xfrystT";
 
-  let receipt: TransferReceipt<any> = {
+  let receipt: routes.Receipt = {
     state: TransferState.SourceInitiated,
     from,
     to,
     originTxs: [{ chain: from, txid }],
   };
-  console.log("Initial State: ", TransferState[receipt.state]);
 
+  // Just track it
   for await (receipt of route.track(receipt))
-    console.log("State: ", TransferState[receipt.state]);
-
-  console.log("Final State: ", TransferState[receipt.state]);
+    console.log("Current State: ", TransferState[receipt.state]);
+  console.log("Final Receipt: ", receipt);
 })();
