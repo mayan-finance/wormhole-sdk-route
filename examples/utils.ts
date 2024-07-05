@@ -42,8 +42,7 @@ export async function getStuff<N extends Network, C extends Chain>(
     case "Solana":
       signer = await getSolanaSignAndSendSigner(
         await chain.getRpc(),
-        getEnv("SOL_PRIVATE_KEY"),
-        { priorityFeePercentile: 0.9 }
+        getEnv("SOL_PRIVATE_KEY")
       );
       break;
     case "Evm":

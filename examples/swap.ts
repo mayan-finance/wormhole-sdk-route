@@ -1,5 +1,6 @@
 import {
   AttestationReceipt,
+  Network,
   ProtocolName,
   TransferReceipt,
   TransferState,
@@ -11,6 +12,17 @@ import { SolanaPlatform } from "@wormhole-foundation/sdk-solana";
 import { MayanRoute } from "../src/index";
 
 import { getStuff } from "./utils";
+import { ReferrerAddresses } from "@mayanfinance/swap-sdk";
+
+// To pass a ReferrerAddress to the initiation functions,
+// create a class that extends the MayanRoute class with
+// an override of the referrerAddress method, returning the addresses
+// by (mayan) platform
+class MayanRefRoute<N extends Network> extends MayanRoute<N> {
+  override referrerAddress(): ReferrerAddresses | undefined {
+    return { evm: "0x49887A216375FDED17DC1aAAD4920c3777265614" };
+  }
+}
 
 (async function () {
   // Setup
@@ -24,7 +36,7 @@ import { getStuff } from "./utils";
   const destination = Wormhole.tokenId(destChain.chain, "native");
 
   // Create a new Wormhole route resolver, adding the Mayan route to the default list
-  const resolver = wh.resolver([MayanRoute]);
+  const resolver = wh.resolver([MayanRefRoute]);
 
   // Show supported tokens
   console.log(await resolver.supportedSourceTokens(sendChain));

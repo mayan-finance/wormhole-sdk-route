@@ -79,8 +79,6 @@ export class MayanRoute<N extends Network>
   NATIVE_GAS_DROPOFF_SUPPORTED = true;
   tokenList?: Token[];
 
-  referrer: ReferrerAddresses | undefined = undefined;
-
   static meta = {
     name: "MayanSwap",
   };
@@ -147,21 +145,21 @@ export class MayanRoute<N extends Network>
     }
   }
 
-  private destTokenAddress(): string {
+  protected destTokenAddress(): string {
     const { destination } = this.request;
     return destination && !isNative(destination.id.address)
       ? canonicalAddress(destination.id)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  private sourceTokenAddress(): string {
+  protected sourceTokenAddress(): string {
     const { source } = this.request;
     return !isNative(source.id.address)
       ? canonicalAddress(source.id)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  private async fetchQuote(params: Vp): Promise<MayanQuote> {
+  protected async fetchQuote(params: Vp): Promise<MayanQuote> {
     const { fromChain, toChain } = this.request;
 
     const quoteOpts: QuoteParams = {
@@ -257,7 +255,7 @@ export class MayanRoute<N extends Network>
           quote.details!,
           originAddress,
           destinationAddress,
-          this.referrer,
+          this.referrerAddress(),
           mayanSolanaSigner(signer),
           rpc
         );
@@ -308,7 +306,7 @@ export class MayanRoute<N extends Network>
           quote.details!,
           originAddress,
           destinationAddress,
-          this.referrer,
+          this.referrerAddress(),
           originAddress,
           Number(nativeChainId!),
           undefined,
@@ -394,15 +392,8 @@ export class MayanRoute<N extends Network>
   override transferUrl(txid: string): string {
     return `https://explorer.mayan.finance/swap/${txid}`;
   }
-}
 
-export function referrerMayanRoute(
-  route: MayanRoute<Network>,
-  referrer: {
-    Evm?: string;
-    Solana?: string;
+  referrerAddress(): ReferrerAddresses | undefined {
+    return undefined;
   }
-) {
-  route.referrer = { evm: referrer.Evm ?? null, solana: referrer.Evm ?? null };
-  return route;
 }
