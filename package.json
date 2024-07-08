@@ -44,7 +44,7 @@
     "@wormhole-foundation/sdk-connect": "^0.7",
     "@wormhole-foundation/sdk-evm": "^0.7",
     "@wormhole-foundation/sdk-solana": "^0.7",
-    "ethers":"^6"
+    "ethers": "^6"
   },
   "devDependencies": {
     "@types/node": "^20.11.6",
