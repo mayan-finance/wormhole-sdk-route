@@ -1,7 +1,7 @@
 import {
   Quote as MayanQuote,
   QuoteParams,
-  Token,
+  ReferrerAddresses,
   addresses,
   fetchQuote,
   getSwapFromEvmTxPayload,
@@ -20,10 +20,13 @@ import {
   Wormhole,
   amount,
   canonicalAddress,
+  isAttested,
   isCompleted,
   isNative,
+  isRedeemed,
   isSignAndSendSigner,
   isSignOnlySigner,
+  isSourceFinalized,
   isSourceInitiated,
   nativeChainIds,
   routes,
@@ -36,7 +39,6 @@ import {
 import {
   NATIVE_CONTRACT_ADDRESS,
   fetchTokensForChain,
-  getDefaultDeadline,
   getTransactionStatus,
   mayanSolanaSigner,
   supportedChains,
@@ -48,7 +50,6 @@ export namespace MayanRoute {
   export type Options = {
     gasDrop: number;
     slippage: number;
-    deadlineInSeconds: number;
   };
   export type NormalizedParams = {
     slippageBps: number;
@@ -72,11 +73,9 @@ export class MayanRoute<N extends Network>
   extends routes.AutomaticRoute<N, Op, Vp, R>
   implements routes.StaticRouteMethods<typeof MayanRoute>
 {
-  MIN_DEADLINE = 60;
   MAX_SLIPPAGE = 1;
 
   NATIVE_GAS_DROPOFF_SUPPORTED = true;
-  tokenList?: Token[];
 
   static meta = {
     name: "MayanSwap",
@@ -86,7 +85,6 @@ export class MayanRoute<N extends Network>
     return {
       gasDrop: 0,
       slippage: 0.05,
-      deadlineInSeconds: getDefaultDeadline(this.request.fromChain.chain),
     };
   }
 
@@ -127,8 +125,6 @@ export class MayanRoute<N extends Network>
 
       if (params.options.slippage > this.MAX_SLIPPAGE)
         throw new Error("Slippage must be less than 100%");
-      if (params.options.deadlineInSeconds < this.MIN_DEADLINE)
-        throw new Error("Deadline must be at least 60 seconds");
 
       return {
         valid: true,
@@ -144,21 +140,21 @@ export class MayanRoute<N extends Network>
     }
   }
 
-  private destTokenAddress(): string {
+  protected destTokenAddress(): string {
     const { destination } = this.request;
     return destination && !isNative(destination.id.address)
       ? canonicalAddress(destination.id)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  private sourceTokenAddress(): string {
+  protected sourceTokenAddress(): string {
     const { source } = this.request;
     return !isNative(source.id.address)
       ? canonicalAddress(source.id)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  private async fetchQuote(params: Vp): Promise<MayanQuote> {
+  protected async fetchQuote(params: Vp): Promise<MayanQuote> {
     const { fromChain, toChain } = this.request;
 
     const quoteOpts: QuoteParams = {
@@ -173,7 +169,9 @@ export class MayanRoute<N extends Network>
     };
 
     const quotes = await fetchQuote(quoteOpts);
-    // Note: Only taking the first quote
+    if (quotes.length === 0) throw new Error("Failed to find quotes");
+
+    // Note: Quotes are sorted by best price
     return quotes[0]!;
   }
 
@@ -243,7 +241,6 @@ export class MayanRoute<N extends Network>
   }
 
   async initiate(signer: Signer<N>, quote: Q, to: ChainAddress) {
-    const { params } = quote;
     const originAddress = signer.address();
     const destinationAddress = canonicalAddress(to);
 
@@ -255,8 +252,7 @@ export class MayanRoute<N extends Network>
           quote.details!,
           originAddress,
           destinationAddress,
-          params.options.deadlineInSeconds,
-          undefined,
+          this.referrerAddress(),
           mayanSolanaSigner(signer),
           rpc
         );
@@ -274,10 +270,7 @@ export class MayanRoute<N extends Network>
             this.sourceTokenAddress()
           );
 
-          const contractAddress =
-            quote.details!.type.toLowerCase() === "wh"
-              ? addresses.MAYAN_EVM_CONTRACT
-              : addresses.MAYAN_FORWARDER_CONTRACT;
+          const contractAddress = addresses.MAYAN_FORWARDER_CONTRACT;
 
           const allowance = await tokenContract.allowance(
             originAddress,
@@ -306,16 +299,17 @@ export class MayanRoute<N extends Network>
           }
         }
 
-        const txReq = await getSwapFromEvmTxPayload(
+        const txReq = getSwapFromEvmTxPayload(
           quote.details!,
+          originAddress,
           destinationAddress,
-          params.options.deadlineInSeconds,
-          undefined,
+          this.referrerAddress(),
           originAddress,
           Number(nativeChainId!),
           undefined,
           undefined // permit?
         );
+
         txReqs.push(
           new EvmUnsignedTransaction(
             {
@@ -366,22 +360,31 @@ export class MayanRoute<N extends Network>
   }
 
   public override async *track(receipt: R, timeout?: number) {
+    if (isCompleted(receipt) || isRedeemed(receipt)) return receipt;
+
     // What should be the default if no timeout is provided?
     let leftover = timeout ? timeout : 60 * 60 * 1000;
     while (leftover > 0) {
       const start = Date.now();
-      if (!isSourceInitiated(receipt))
-        throw new Error("Transfer not initiated");
 
-      const txstatus = await getTransactionStatus(
-        receipt.originTxs[receipt.originTxs.length - 1]!
-      );
+      if (
+        // this is awkward but there is not hasSourceInitiated like fn in sdk (todo)
+        isSourceInitiated(receipt) ||
+        isSourceFinalized(receipt) ||
+        isAttested(receipt)
+      ) {
+        const txstatus = await getTransactionStatus(
+          receipt.originTxs[receipt.originTxs.length - 1]!
+        );
 
-      if (txstatus) {
-        receipt = txStatusToReceipt(txstatus);
-        yield { ...receipt, txstatus };
+        if (txstatus) {
+          receipt = txStatusToReceipt(txstatus);
+          yield { ...receipt, txstatus };
 
-        if (isCompleted(receipt)) return receipt;
+          if (isCompleted(receipt) || isRedeemed(receipt)) return receipt;
+        }
+      } else {
+        throw new Error("Transfer must have been initiated");
       }
 
       // sleep for 1 second so we dont spam the endpoint
@@ -394,5 +397,9 @@ export class MayanRoute<N extends Network>
 
   override transferUrl(txid: string): string {
     return `https://explorer.mayan.finance/swap/${txid}`;
+  }
+
+  referrerAddress(): ReferrerAddresses | undefined {
+    return undefined;
   }
 }
