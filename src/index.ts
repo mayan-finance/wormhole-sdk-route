@@ -40,7 +40,7 @@ import {
 import {
   SolanaPlatform,
   SolanaUnsignedTransaction,
-} from "@wormhole-foundation/sdk-solana/dist/cjs";
+} from "@wormhole-foundation/sdk-solana";
 import {
   NATIVE_CONTRACT_ADDRESS,
   fetchTokensForChain,
