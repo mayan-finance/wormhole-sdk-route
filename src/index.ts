@@ -3,10 +3,11 @@ import {
   QuoteParams,
   ReferrerAddresses,
   addresses,
+  createSwapFromSolanaInstructions,
   fetchQuote,
   getSwapFromEvmTxPayload,
-  swapFromSolana,
 } from "@mayanfinance/swap-sdk";
+import { MessageV0, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import {
   Chain,
   ChainAddress,
@@ -37,10 +38,13 @@ import {
   EvmUnsignedTransaction,
 } from "@wormhole-foundation/sdk-evm";
 import {
+  SolanaPlatform,
+  SolanaUnsignedTransaction,
+} from "@wormhole-foundation/sdk-solana";
+import {
   NATIVE_CONTRACT_ADDRESS,
   fetchTokensForChain,
   getTransactionStatus,
-  mayanSolanaSigner,
   supportedChains,
   toMayanChainName,
   txStatusToReceipt,
@@ -248,15 +252,55 @@ export class MayanRoute<N extends Network>
       const rpc = await this.request.fromChain.getRpc();
       const txs: TransactionId[] = [];
       if (this.request.fromChain.chain === "Solana") {
-        const swapResult = await swapFromSolana(
-          quote.details!,
-          originAddress,
-          destinationAddress,
-          this.referrerAddress(),
-          mayanSolanaSigner(signer),
-          rpc
-        );
-        txs.push({ chain: "Solana", txid: swapResult.signature });
+        const { instructions, signers, lookupTables } =
+          await createSwapFromSolanaInstructions(
+            quote.details!,
+            originAddress,
+            destinationAddress,
+            this.referrerAddress(),
+            rpc
+          );
+
+        const message = MessageV0.compile({
+          instructions,
+          payerKey: new PublicKey(originAddress),
+          recentBlockhash: "",
+          addressLookupTableAccounts: lookupTables,
+        });
+        const txReqs = [
+          new SolanaUnsignedTransaction(
+            {
+              transaction: new VersionedTransaction(message),
+              signers: signers,
+            },
+            this.request.fromChain.network,
+            this.request.fromChain.chain,
+            "Execute Swap"
+          ),
+        ];
+
+        if (isSignAndSendSigner(signer)) {
+          const txids = await signer.signAndSend(txReqs);
+          txs.push(
+            ...txids.map((txid) => ({
+              chain: this.request.fromChain.chain,
+              txid,
+            }))
+          );
+        } else if (isSignOnlySigner(signer)) {
+          const signed = await signer.sign(txReqs);
+          const txids = await SolanaPlatform.sendWait(
+            this.request.fromChain.chain,
+            rpc,
+            signed
+          );
+          txs.push(
+            ...txids.map((txid) => ({
+              chain: this.request.fromChain.chain,
+              txid,
+            }))
+          );
+        }
       } else {
         const txReqs: EvmUnsignedTransaction<N, EvmChains>[] = [];
         const nativeChainId = nativeChainIds.networkChainToNativeChainId.get(
@@ -323,21 +367,21 @@ export class MayanRoute<N extends Network>
           )
         );
 
-        if (isSignOnlySigner(signer)) {
-          const signed = await signer.sign(txReqs);
-          const txids = await EvmPlatform.sendWait(
-            this.request.fromChain.chain,
-            rpc,
-            signed
-          );
+        if (isSignAndSendSigner(signer)) {
+          const txids = await signer.signAndSend(txReqs);
           txs.push(
             ...txids.map((txid) => ({
               chain: this.request.fromChain.chain,
               txid,
             }))
           );
-        } else if (isSignAndSendSigner(signer)) {
-          const txids = await signer.signAndSend(txReqs);
+        } else if (isSignOnlySigner(signer)) {
+          const signed = await signer.sign(txReqs);
+          const txids = await EvmPlatform.sendWait(
+            this.request.fromChain.chain,
+            rpc,
+            signed
+          );
           txs.push(
             ...txids.map((txid) => ({
               chain: this.request.fromChain.chain,
