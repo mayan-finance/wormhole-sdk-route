@@ -260,15 +260,10 @@ export class MayanRoute<N extends Network>
             this.referrerAddress(),
             rpc
           );
-        const swapper = new PublicKey(originAddress);
-
-        const feePayer = quote.details!.gasless
-          ? new PublicKey(quote.details!.relayer)
-          : swapper;
 
         const message = MessageV0.compile({
           instructions,
-          payerKey: feePayer,
+          payerKey: new PublicKey(originAddress),
           recentBlockhash: "",
           addressLookupTableAccounts: lookupTables,
         });
