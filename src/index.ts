@@ -284,21 +284,21 @@ export class MayanRoute<N extends Network>
           ),
         ];
 
-        if (isSignOnlySigner(signer)) {
-          const signed = await signer.sign(txReqs);
-          const txids = await SolanaPlatform.sendWait(
-            this.request.fromChain.chain,
-            rpc,
-            signed
-          );
+        if (isSignAndSendSigner(signer)) {
+          const txids = await signer.signAndSend(txReqs);
           txs.push(
             ...txids.map((txid) => ({
               chain: this.request.fromChain.chain,
               txid,
             }))
           );
-        } else if (isSignAndSendSigner(signer)) {
-          const txids = await signer.signAndSend(txReqs);
+        } else if (isSignOnlySigner(signer)) {
+          const signed = await signer.sign(txReqs);
+          const txids = await SolanaPlatform.sendWait(
+            this.request.fromChain.chain,
+            rpc,
+            signed
+          );
           txs.push(
             ...txids.map((txid) => ({
               chain: this.request.fromChain.chain,
@@ -372,21 +372,21 @@ export class MayanRoute<N extends Network>
           )
         );
 
-        if (isSignOnlySigner(signer)) {
-          const signed = await signer.sign(txReqs);
-          const txids = await EvmPlatform.sendWait(
-            this.request.fromChain.chain,
-            rpc,
-            signed
-          );
+        if (isSignAndSendSigner(signer)) {
+          const txids = await signer.signAndSend(txReqs);
           txs.push(
             ...txids.map((txid) => ({
               chain: this.request.fromChain.chain,
               txid,
             }))
           );
-        } else if (isSignAndSendSigner(signer)) {
-          const txids = await signer.signAndSend(txReqs);
+        } else if (isSignOnlySigner(signer)) {
+          const signed = await signer.sign(txReqs);
+          const txids = await EvmPlatform.sendWait(
+            this.request.fromChain.chain,
+            rpc,
+            signed
+          );
           txs.push(
             ...txids.map((txid) => ({
               chain: this.request.fromChain.chain,
