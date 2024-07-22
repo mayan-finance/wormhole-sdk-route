@@ -184,12 +184,6 @@ export class MayanRoute<N extends Network>
       const { fromChain, toChain } = this.request;
       const quote = await this.fetchQuote(params);
 
-      if (quote.effectiveAmountIn < quote.refundRelayerFee) {
-        throw new Error(
-          "Refund relayer fee is greater than the effective amount in"
-        );
-      }
-
       // TODO: what if source and dest are _both_ EVM?
       const relayFee =
         quote.fromChain !== "solana"
