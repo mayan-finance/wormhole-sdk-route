@@ -31,6 +31,7 @@ import {
   isSourceInitiated,
   nativeChainIds,
   routes,
+  finality,
 } from "@wormhole-foundation/sdk-connect";
 import {
   EvmChains,
@@ -123,7 +124,7 @@ export class MayanRoute<N extends Network>
     return true;
   }
 
-  async validate(params: Tp): Promise<Vr> {
+  async validate(request: routes.RouteTransferRequest<N>, params: Tp): Promise<Vr> {
     try {
       params.options = params.options ?? this.getDefaultOptions();
 
@@ -144,27 +145,27 @@ export class MayanRoute<N extends Network>
     }
   }
 
-  protected destTokenAddress(): string {
-    const { destination } = this.request;
+  protected destTokenAddress(request: routes.RouteTransferRequest<N>): string {
+    const { destination } = request;
     return destination && !isNative(destination.id.address)
       ? canonicalAddress(destination.id)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  protected sourceTokenAddress(): string {
-    const { source } = this.request;
+  protected sourceTokenAddress(request: routes.RouteTransferRequest<N>): string {
+    const { source } = request;
     return !isNative(source.id.address)
       ? canonicalAddress(source.id)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  protected async fetchQuote(params: Vp): Promise<MayanQuote> {
-    const { fromChain, toChain } = this.request;
+  protected async fetchQuote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<MayanQuote> {
+    const { fromChain, toChain } = request;
 
     const quoteOpts: QuoteParams = {
       amount: Number(params.amount),
-      fromToken: this.sourceTokenAddress(),
-      toToken: this.destTokenAddress(),
+      fromToken: this.sourceTokenAddress(request),
+      toToken: this.destTokenAddress(request),
       fromChain: toMayanChainName(fromChain.chain),
       toChain: toMayanChainName(toChain.chain),
       ...this.getDefaultOptions(),
@@ -179,10 +180,10 @@ export class MayanRoute<N extends Network>
     return quotes[0]!;
   }
 
-  async quote(params: Vp): Promise<QR> {
+  async quote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<QR> {
     try {
-      const { fromChain, toChain } = this.request;
-      const quote = await this.fetchQuote(params);
+      const { fromChain, toChain } = request;
+      const quote = await this.fetchQuote(request, params);
 
       // TODO: what if source and dest are _both_ EVM?
       const relayFee =
@@ -190,7 +191,7 @@ export class MayanRoute<N extends Network>
           ? {
               token: Wormhole.tokenId(
                 fromChain.chain,
-                this.sourceTokenAddress()
+                this.sourceTokenAddress(request)
               ),
               amount: amount.parse(
                 amount.denoise(quote.swapRelayerFee, quote.fromToken.decimals),
@@ -198,7 +199,7 @@ export class MayanRoute<N extends Network>
               ),
             }
           : {
-              token: Wormhole.tokenId(toChain.chain, this.destTokenAddress()),
+              token: Wormhole.tokenId(toChain.chain, this.destTokenAddress(request)),
               amount: amount.parse(
                 amount.denoise(quote.redeemRelayerFee, quote.toToken.decimals),
                 quote.toToken.decimals
@@ -209,14 +210,14 @@ export class MayanRoute<N extends Network>
         success: true,
         params,
         sourceToken: {
-          token: Wormhole.tokenId(fromChain.chain, this.sourceTokenAddress()),
+          token: Wormhole.tokenId(fromChain.chain, this.sourceTokenAddress(request)),
           amount: amount.parse(
             amount.denoise(quote.effectiveAmountIn, quote.fromToken.decimals),
             quote.fromToken.decimals
           ),
         },
         destinationToken: {
-          token: Wormhole.tokenId(toChain.chain, this.destTokenAddress()),
+          token: Wormhole.tokenId(toChain.chain, this.destTokenAddress(request)),
           amount: amount.parse(
             amount.denoise(quote.expectedAmountOut, quote.toToken.decimals),
             quote.toToken.decimals
@@ -227,6 +228,7 @@ export class MayanRoute<N extends Network>
           amount.denoise(quote.gasDrop, quote.toToken.decimals),
           quote.toToken.decimals
         ),
+        eta: finality.estimateFinalityTime(request.fromChain.chain),
         details: quote,
       };
       return fullQuote;
@@ -238,14 +240,14 @@ export class MayanRoute<N extends Network>
     }
   }
 
-  async initiate(signer: Signer<N>, quote: Q, to: ChainAddress) {
+  async initiate(request: routes.RouteTransferRequest<N>, signer: Signer<N>, quote: Q, to: ChainAddress) {
     const originAddress = signer.address();
     const destinationAddress = canonicalAddress(to);
 
     try {
-      const rpc = await this.request.fromChain.getRpc();
+      const rpc = await request.fromChain.getRpc();
       const txs: TransactionId[] = [];
-      if (this.request.fromChain.chain === "Solana") {
+      if (request.fromChain.chain === "Solana") {
         const { instructions, signers, lookupTables } =
           await createSwapFromSolanaInstructions(
             quote.details!,
@@ -267,8 +269,8 @@ export class MayanRoute<N extends Network>
               transaction: new VersionedTransaction(message),
               signers: signers,
             },
-            this.request.fromChain.network,
-            this.request.fromChain.chain,
+            request.fromChain.network,
+            request.fromChain.chain,
             "Execute Swap"
           ),
         ];
@@ -277,20 +279,20 @@ export class MayanRoute<N extends Network>
           const txids = await signer.signAndSend(txReqs);
           txs.push(
             ...txids.map((txid) => ({
-              chain: this.request.fromChain.chain,
+              chain: request.fromChain.chain,
               txid,
             }))
           );
         } else if (isSignOnlySigner(signer)) {
           const signed = await signer.sign(txReqs);
           const txids = await SolanaPlatform.sendWait(
-            this.request.fromChain.chain,
+            request.fromChain.chain,
             rpc,
             signed
           );
           txs.push(
             ...txids.map((txid) => ({
-              chain: this.request.fromChain.chain,
+              chain: request.fromChain.chain,
               txid,
             }))
           );
@@ -298,14 +300,14 @@ export class MayanRoute<N extends Network>
       } else {
         const txReqs: EvmUnsignedTransaction<N, EvmChains>[] = [];
         const nativeChainId = nativeChainIds.networkChainToNativeChainId.get(
-          this.request.fromChain.network,
-          this.request.fromChain.chain
+          request.fromChain.network,
+          request.fromChain.chain
         );
 
-        if (!isNative(this.request.source.id.address)) {
+        if (!isNative(request.source.id.address)) {
           const tokenContract = EvmPlatform.getTokenImplementation(
-            await this.request.fromChain.getRpc(),
-            this.sourceTokenAddress()
+            await request.fromChain.getRpc(),
+            this.sourceTokenAddress(request)
           );
 
           const contractAddress = addresses.MAYAN_FORWARDER_CONTRACT;
@@ -329,8 +331,8 @@ export class MayanRoute<N extends Network>
                   chainId: nativeChainId as bigint,
                   ...txReq,
                 },
-                this.request.fromChain.network,
-                this.request.fromChain.chain as EvmChains,
+                request.fromChain.network,
+                request.fromChain.chain as EvmChains,
                 "Approve Allowance"
               )
             );
@@ -355,8 +357,8 @@ export class MayanRoute<N extends Network>
               chainId: nativeChainId,
               ...txReq,
             },
-            this.request.fromChain.network,
-            this.request.fromChain.chain as EvmChains,
+            request.fromChain.network,
+            request.fromChain.chain as EvmChains,
             "Execute Swap"
           )
         );
@@ -365,20 +367,20 @@ export class MayanRoute<N extends Network>
           const txids = await signer.signAndSend(txReqs);
           txs.push(
             ...txids.map((txid) => ({
-              chain: this.request.fromChain.chain,
+              chain: request.fromChain.chain,
               txid,
             }))
           );
         } else if (isSignOnlySigner(signer)) {
           const signed = await signer.sign(txReqs);
           const txids = await EvmPlatform.sendWait(
-            this.request.fromChain.chain,
+            request.fromChain.chain,
             rpc,
             signed
           );
           txs.push(
             ...txids.map((txid) => ({
-              chain: this.request.fromChain.chain,
+              chain: request.fromChain.chain,
               txid,
             }))
           );
@@ -386,8 +388,8 @@ export class MayanRoute<N extends Network>
       }
 
       return {
-        from: this.request.fromChain.chain,
-        to: this.request.toChain.chain,
+        from: request.fromChain.chain,
+        to: request.toChain.chain,
         state: TransferState.SourceInitiated,
         originTxs: txs,
       } satisfies SourceInitiatedTransferReceipt;
