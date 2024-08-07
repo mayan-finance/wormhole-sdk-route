@@ -36,9 +36,9 @@
     "axios": "^1.4.0"
   },
   "peerDependencies": {
-    "@wormhole-foundation/sdk-connect": "^0.7",
-    "@wormhole-foundation/sdk-evm": "^0.7",
-    "@wormhole-foundation/sdk-solana": "^0.7",
+    "@wormhole-foundation/sdk-connect": "^0.9.1",
+    "@wormhole-foundation/sdk-evm": "^0.9.1",
+    "@wormhole-foundation/sdk-solana": "^0.9.1",
     "@solana/web3.js": "^1.91",
     "ethers": "^6"
   },
