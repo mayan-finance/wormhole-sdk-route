@@ -189,17 +189,14 @@ export class MayanRoute<N extends Network>
       const relayFee =
         quote.fromChain !== "solana"
           ? {
-              token: Wormhole.tokenId(
-                fromChain.chain,
-                this.sourceTokenAddress(request)
-              ),
+              token: request.source.id,
               amount: amount.parse(
                 amount.denoise(quote.swapRelayerFee, quote.fromToken.decimals),
                 quote.fromToken.decimals
               ),
             }
           : {
-              token: Wormhole.tokenId(toChain.chain, this.destTokenAddress(request)),
+              token: request.destination.id,
               amount: amount.parse(
                 amount.denoise(quote.redeemRelayerFee, quote.toToken.decimals),
                 quote.toToken.decimals
