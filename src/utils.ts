@@ -164,6 +164,7 @@ export enum MayanClientStatus {
 
 export enum MayanTransactionStatus {
   SETTLED_ON_SOLANA = "SETTLED_ON_SOLANA",
+  CLAIMED_ON_SOLANA = "CLAIMED_ON_SOLANA",
   REDEEMED_ON_EVM = "REDEEMED_ON_EVM",
   REFUNDED_ON_EVM = "REFUNDED_ON_EVM",
   REFUNDED_ON_SOLANA = "REFUNDED_ON_SOLANA",
@@ -175,6 +176,8 @@ export function toWormholeTransferState(
   switch (mts) {
     case MayanTransactionStatus.SETTLED_ON_SOLANA:
       return TransferState.DestinationInitiated;
+    case MayanTransactionStatus.CLAIMED_ON_SOLANA:
+      return TransferState.DestinationFinalized;
     case MayanTransactionStatus.REDEEMED_ON_EVM:
       return TransferState.DestinationInitiated;
     case MayanTransactionStatus.REFUNDED_ON_EVM:
