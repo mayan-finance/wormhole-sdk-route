@@ -401,7 +401,6 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
 
   switch (state) {
     case TransferState.SourceInitiated:
-    case TransferState.SourceFinalized:
       // Initital transfer vaa from source chain
       if ("transfer" in attestations && attestations["transfer"]) {
         return {
