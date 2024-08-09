@@ -25,6 +25,7 @@ import {
   isCompleted,
   isNative,
   isRedeemed,
+  isRefunded,
   isSignAndSendSigner,
   isSignOnlySigner,
   isSourceFinalized,
@@ -81,6 +82,7 @@ export class MayanRoute<N extends Network>
   MAX_SLIPPAGE = 1;
 
   NATIVE_GAS_DROPOFF_SUPPORTED = true;
+  AUTOMATIC_DEPOSIT = true;
 
   static meta = {
     name: "MayanSwap",
@@ -397,7 +399,7 @@ export class MayanRoute<N extends Network>
   }
 
   public override async *track(receipt: R, timeout?: number) {
-    if (isCompleted(receipt) || isRedeemed(receipt)) return receipt;
+    if (isCompleted(receipt) || isRedeemed(receipt) || isRefunded(receipt)) return receipt;
 
     // What should be the default if no timeout is provided?
     let leftover = timeout ? timeout : 60 * 60 * 1000;
@@ -418,7 +420,7 @@ export class MayanRoute<N extends Network>
           receipt = txStatusToReceipt(txstatus);
           yield { ...receipt, txstatus };
 
-          if (isCompleted(receipt) || isRedeemed(receipt)) return receipt;
+          if (isCompleted(receipt) || isRedeemed(receipt) || isRefunded(receipt)) return receipt;
         }
       } else {
         throw new Error("Transfer must have been initiated");
