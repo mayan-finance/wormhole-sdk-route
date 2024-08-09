@@ -232,6 +232,7 @@ export interface TransactionStatus {
   deadline: string;
 
   swapChain: string;
+  refundChain: string;
 
   destChain: string;
   destAddress: string;
@@ -354,7 +355,7 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
   let refundTxs = [];
   if (txStatus.refundTxHash) {
     refundTxs.push({
-      chain: srcChain,
+      chain: toWormholeChainName(txStatus.refundChain as MayanChainName),
       txid: txStatus.refundTxHash
     });
   }
