@@ -81,7 +81,7 @@ export class MayanRoute<N extends Network>
 {
   MAX_SLIPPAGE = 1;
 
-  static NATIVE_GAS_DROPOFF_SUPPORTED = true;
+  static NATIVE_GAS_DROPOFF_SUPPORTED = false;
 
   static meta = {
     name: "MayanSwap",
