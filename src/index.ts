@@ -81,8 +81,7 @@ export class MayanRoute<N extends Network>
 {
   MAX_SLIPPAGE = 1;
 
-  NATIVE_GAS_DROPOFF_SUPPORTED = true;
-  AUTOMATIC_DEPOSIT = true;
+  static NATIVE_GAS_DROPOFF_SUPPORTED = true;
 
   static meta = {
     name: "MayanSwap",
@@ -109,7 +108,7 @@ export class MayanRoute<N extends Network>
     return fetchTokensForChain(fromChain.chain);
   }
 
-  static isProtocolSupported(chain: ChainContext<Network>): boolean {
+  static isProtocolSupported<N extends Network>(chain: ChainContext<N>): boolean {
     return supportedChains().includes(chain.chain);
   }
 
