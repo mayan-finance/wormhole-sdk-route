@@ -11,6 +11,7 @@ import {
   CompletedTransferReceipt,
   FailedTransferReceipt,
   RedeemedTransferReceipt,
+  RefundedTransferReceipt,
   Signer,
   SourceFinalizedTransferReceipt,
   SourceInitiatedTransferReceipt,
@@ -164,6 +165,7 @@ export enum MayanClientStatus {
 
 export enum MayanTransactionStatus {
   SETTLED_ON_SOLANA = "SETTLED_ON_SOLANA",
+  CLAIMED_ON_SOLANA = "CLAIMED_ON_SOLANA",
   REDEEMED_ON_EVM = "REDEEMED_ON_EVM",
   REFUNDED_ON_EVM = "REFUNDED_ON_EVM",
   REFUNDED_ON_SOLANA = "REFUNDED_ON_SOLANA",
@@ -175,12 +177,14 @@ export function toWormholeTransferState(
   switch (mts) {
     case MayanTransactionStatus.SETTLED_ON_SOLANA:
       return TransferState.DestinationInitiated;
+    case MayanTransactionStatus.CLAIMED_ON_SOLANA:
+      return TransferState.DestinationFinalized;
     case MayanTransactionStatus.REDEEMED_ON_EVM:
       return TransferState.DestinationInitiated;
     case MayanTransactionStatus.REFUNDED_ON_EVM:
-      return TransferState.Failed;
+      return TransferState.Refunded;
     case MayanTransactionStatus.REFUNDED_ON_SOLANA:
-      return TransferState.Failed;
+      return TransferState.Refunded;
     default:
       return TransferState.SourceInitiated;
   }
@@ -228,6 +232,7 @@ export interface TransactionStatus {
   deadline: string;
 
   swapChain: string;
+  refundChain: string;
 
   destChain: string;
   destAddress: string;
@@ -347,6 +352,14 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
       };
     });
 
+  let refundTxs = [];
+  if (txStatus.refundTxHash) {
+    refundTxs.push({
+      chain: toWormholeChainName(txStatus.refundChain as MayanChainName),
+      txid: txStatus.refundTxHash
+    });
+  }
+
   const attestations: {
     [key: string]: Required<AttestationReceipt<"WormholeCore">>;
   } = {};
@@ -369,6 +382,24 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
     }
   }
 
+  const attestation =
+    "redeem" in attestations && attestations["redeem"]
+      ? attestations["redeem"]
+      : attestations["transfer"];
+
+  if (txStatus.clientStatus === MayanClientStatus.COMPLETED) {
+    return {
+      from: srcChain,
+      to: dstChain,
+      originTxs,
+      destinationTxs,
+      state: TransferState.DestinationFinalized,
+      attestation: attestation || ({} as AttestationReceipt<"WormholeCore">),
+    } satisfies CompletedTransferReceipt<
+      AttestationReceipt<"WormholeCore">
+    >;
+  }
+
   switch (state) {
     case TransferState.SourceInitiated:
       // Initital transfer vaa from source chain
@@ -386,25 +417,7 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
       break;
 
     case TransferState.DestinationInitiated:
-      const attestation =
-        "redeem" in attestations && attestations["redeem"]
-          ? attestations["redeem"]
-          : attestations["transfer"];
-
       if (!attestation) break;
-
-      if (txStatus.clientStatus === MayanClientStatus.COMPLETED) {
-        return {
-          from: srcChain,
-          to: dstChain,
-          originTxs,
-          destinationTxs,
-          state: TransferState.DestinationFinalized,
-          attestation,
-        } satisfies CompletedTransferReceipt<
-          AttestationReceipt<"WormholeCore">
-        >;
-      }
 
       return {
         from: srcChain,
@@ -415,27 +428,23 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
         attestation,
       } satisfies RedeemedTransferReceipt<AttestationReceipt<"WormholeCore">>;
 
-    case TransferState.Failed:
-      // VAA that is used to refund on source chain
-      if ("refund" in attestations && attestations["refund"]) {
+    case TransferState.Refunded:
         return {
           from: srcChain,
           to: dstChain,
           originTxs,
-          destinationTxs,
-          state: TransferState.Failed,
-          attestation: attestations["refund"],
-          error: "Refunded on source chain",
-        } satisfies FailedTransferReceipt<AttestationReceipt<"WormholeCore">>;
-      }
+          refundTxs,
+          state,
+          attestation: attestations["refund"]!,
+        } satisfies RefundedTransferReceipt<AttestationReceipt<"WormholeCore">>;
 
-      // No vaa to refund on source chain
+    case TransferState.Failed:
       return {
         from: srcChain,
         to: dstChain,
         originTxs,
         destinationTxs,
-        state: TransferState.Failed,
+        state,
         error: "Failed to complete transfer",
       } satisfies FailedTransferReceipt<AttestationReceipt<"WormholeCore">>;
   }
