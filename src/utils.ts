@@ -381,6 +381,24 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
     }
   }
 
+  const attestation =
+    "redeem" in attestations && attestations["redeem"]
+      ? attestations["redeem"]
+      : attestations["transfer"];
+
+  if (txStatus.clientStatus === MayanClientStatus.COMPLETED) {
+    return {
+      from: srcChain,
+      to: dstChain,
+      originTxs,
+      destinationTxs,
+      state: TransferState.DestinationFinalized,
+      attestation: attestation || ({} as AttestationReceipt<"WormholeCore">),
+    } satisfies CompletedTransferReceipt<
+      AttestationReceipt<"WormholeCore">
+    >;
+  }
+
   switch (state) {
     case TransferState.SourceInitiated:
     case TransferState.SourceFinalized:
@@ -399,25 +417,7 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
       break;
 
     case TransferState.DestinationInitiated:
-      const attestation =
-        "redeem" in attestations && attestations["redeem"]
-          ? attestations["redeem"]
-          : attestations["transfer"];
-
       if (!attestation) break;
-
-      if (txStatus.clientStatus === MayanClientStatus.COMPLETED) {
-        return {
-          from: srcChain,
-          to: dstChain,
-          originTxs,
-          destinationTxs,
-          state: TransferState.DestinationFinalized,
-          attestation,
-        } satisfies CompletedTransferReceipt<
-          AttestationReceipt<"WormholeCore">
-        >;
-      }
 
       return {
         from: srcChain,
