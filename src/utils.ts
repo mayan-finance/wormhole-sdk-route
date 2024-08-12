@@ -74,6 +74,16 @@ export function toMayanChainName(chain: Chain): MayanChainName {
   return chainNameMap[chain] as MayanChainName;
 }
 
+export function fromMayanChainName(mayanChain: MayanChainName): Chain {
+  for (const [wormholeChain, mayanName] of Object.entries(chainNameMap)) {
+    if (mayanName === mayanChain) {
+      return wormholeChain as Chain;
+    }
+  }
+  throw new Error(`Unknown Mayan chain ${mayanChain}`);
+}
+
+
 export function toWormholeChainName(chainIdStr: string): Chain {
   return toChain(Number(chainIdStr));
 }
@@ -355,7 +365,7 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
   let refundTxs = [];
   if (txStatus.refundTxHash) {
     refundTxs.push({
-      chain: toWormholeChainName(txStatus.refundChain as MayanChainName),
+      chain: fromMayanChainName(txStatus.refundChain as MayanChainName),
       txid: txStatus.refundTxHash
     });
   }
@@ -398,63 +408,69 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
     } satisfies CompletedTransferReceipt<
       AttestationReceipt<"WormholeCore">
     >;
-  }
 
-  switch (state) {
-    case TransferState.SourceInitiated:
-      // Initital transfer vaa from source chain
-      if ("transfer" in attestations && attestations["transfer"]) {
+  } else if (txStatus.clientStatus === MayanClientStatus.REFUNDED) {
+    console.log('refunded!');
+    return {
+      from: srcChain,
+      to: dstChain,
+      originTxs,
+      refundTxs,
+      state: TransferState.Refunded,
+      attestation: attestations["refund"]!,
+    } satisfies RefundedTransferReceipt<AttestationReceipt<"WormholeCore">>;
+
+  } else if (txStatus.clientStatus === MayanClientStatus.INPROGRESS) {
+    switch (state) {
+      case TransferState.SourceInitiated:
+        // Initital transfer vaa from source chain
+        if ("transfer" in attestations && attestations["transfer"]) {
+          return {
+            from: srcChain,
+            to: dstChain,
+            originTxs,
+            state: TransferState.SourceFinalized,
+            attestation: attestations["transfer"],
+          } satisfies SourceFinalizedTransferReceipt<
+            AttestationReceipt<"WormholeCore">
+          >;
+        }
+        break;
+
+      case TransferState.DestinationInitiated:
+        if (!attestation) break;
+
         return {
           from: srcChain,
           to: dstChain,
           originTxs,
-          state: TransferState.SourceFinalized,
-          attestation: attestations["transfer"],
-        } satisfies SourceFinalizedTransferReceipt<
-          AttestationReceipt<"WormholeCore">
-        >;
-      }
-      break;
+          destinationTxs,
+          state: TransferState.DestinationInitiated,
+          attestation,
+        } satisfies RedeemedTransferReceipt<AttestationReceipt<"WormholeCore">>;
 
-    case TransferState.DestinationInitiated:
-      if (!attestation) break;
-
-      return {
-        from: srcChain,
-        to: dstChain,
-        originTxs,
-        destinationTxs,
-        state: TransferState.DestinationInitiated,
-        attestation,
-      } satisfies RedeemedTransferReceipt<AttestationReceipt<"WormholeCore">>;
-
-    case TransferState.Refunded:
+      case TransferState.Failed:
         return {
           from: srcChain,
           to: dstChain,
           originTxs,
-          refundTxs,
+          destinationTxs,
           state,
-          attestation: attestations["refund"]!,
-        } satisfies RefundedTransferReceipt<AttestationReceipt<"WormholeCore">>;
+          error: "Failed to complete transfer",
+        } satisfies FailedTransferReceipt<AttestationReceipt<"WormholeCore">>;
+    }
 
-    case TransferState.Failed:
-      return {
-        from: srcChain,
-        to: dstChain,
-        originTxs,
-        destinationTxs,
-        state,
-        error: "Failed to complete transfer",
-      } satisfies FailedTransferReceipt<AttestationReceipt<"WormholeCore">>;
+    // This default case occurs if the above breaks trigger
+    return {
+      from: srcChain,
+      to: dstChain,
+      originTxs,
+      state: TransferState.SourceInitiated,
+    } satisfies SourceInitiatedTransferReceipt;
+
+  } else {
+    throw new Error(`Unknown Mayan clientStatus ${txStatus.clientStatus}`);
   }
-
-  return {
-    from: srcChain,
-    to: dstChain,
-    originTxs,
-    state: TransferState.SourceInitiated,
-  } satisfies SourceInitiatedTransferReceipt;
 }
 
 export async function getTransactionStatus(
