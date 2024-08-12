@@ -186,13 +186,10 @@ export function toWormholeTransferState(
 ): TransferState {
   switch (mts) {
     case MayanTransactionStatus.SETTLED_ON_SOLANA:
-      return TransferState.DestinationInitiated;
     case MayanTransactionStatus.CLAIMED_ON_SOLANA:
-      return TransferState.DestinationFinalized;
     case MayanTransactionStatus.REDEEMED_ON_EVM:
       return TransferState.DestinationInitiated;
     case MayanTransactionStatus.REFUNDED_ON_EVM:
-      return TransferState.Refunded;
     case MayanTransactionStatus.REFUNDED_ON_SOLANA:
       return TransferState.Refunded;
     default:
