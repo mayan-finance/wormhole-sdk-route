@@ -9,12 +9,10 @@ import {
   AttestationReceipt,
   Chain,
   CompletedTransferReceipt,
-  FailedTransferReceipt,
   RedeemedTransferReceipt,
   RefundedTransferReceipt,
-  Signer,
-  SourceFinalizedTransferReceipt,
   SourceInitiatedTransferReceipt,
+  Signer,
   TokenId,
   TransactionId,
   TransferState,
@@ -171,30 +169,7 @@ export enum MayanClientStatus {
   INPROGRESS = "INPROGRESS",
   COMPLETED = "COMPLETED",
   REFUNDED = "REFUNDED",
-}
-
-export enum MayanTransactionStatus {
-  SETTLED_ON_SOLANA = "SETTLED_ON_SOLANA",
-  CLAIMED_ON_SOLANA = "CLAIMED_ON_SOLANA",
-  REDEEMED_ON_EVM = "REDEEMED_ON_EVM",
-  REFUNDED_ON_EVM = "REFUNDED_ON_EVM",
-  REFUNDED_ON_SOLANA = "REFUNDED_ON_SOLANA",
-}
-
-export function toWormholeTransferState(
-  mts: MayanTransactionStatus
-): TransferState {
-  switch (mts) {
-    case MayanTransactionStatus.SETTLED_ON_SOLANA:
-    case MayanTransactionStatus.CLAIMED_ON_SOLANA:
-    case MayanTransactionStatus.REDEEMED_ON_EVM:
-      return TransferState.DestinationInitiated;
-    case MayanTransactionStatus.REFUNDED_ON_EVM:
-    case MayanTransactionStatus.REFUNDED_ON_SOLANA:
-      return TransferState.Refunded;
-    default:
-      return TransferState.SourceInitiated;
-  }
+  CANCELED = "CANCELED",
 }
 
 const possibleVaaTypes = [
@@ -228,7 +203,6 @@ export interface TransactionStatus {
   sourceChain: string;
   sourceTxHash: string;
   sourceTxBlockNo: number;
-  status: MayanTransactionStatus;
 
   transferSequence: string;
   swapSequence: string;
@@ -328,7 +302,6 @@ export interface Tx {
 }
 
 export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
-  const state = toWormholeTransferState(txStatus.status);
   const srcChain = toWormholeChainName(txStatus.sourceChain as MayanChainName);
   const dstChain = toWormholeChainName(txStatus.destChain as MayanChainName);
 
@@ -389,10 +362,16 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
     }
   }
 
-  const attestation =
-    "redeem" in attestations && attestations["redeem"]
-      ? attestations["redeem"]
-      : attestations["transfer"];
+  // TODO this is a hack. The Receipt type should ideally not require an Attestation.
+  let attestation: AttestationReceipt<"WormholeCore"> = ({} as AttestationReceipt<"WormholeCore">);
+  let isAttested = false;
+  if ("redeem" in attestations) {
+    attestation = attestations["redeem"];
+    isAttested = true;
+  } else if ("transfer" in attestations) {
+    attestation = attestations["transfer"];
+    isAttested = true;
+  }
 
   if (txStatus.clientStatus === MayanClientStatus.COMPLETED) {
     return {
@@ -401,13 +380,12 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
       originTxs,
       destinationTxs,
       state: TransferState.DestinationFinalized,
-      // TODO this is a hack. The Receipt type should ideally not require an Attestation.
-      attestation: attestation || ({} as AttestationReceipt<"WormholeCore">),
+      attestation,
     } satisfies CompletedTransferReceipt<
       AttestationReceipt<"WormholeCore">
     >;
 
-  } else if (txStatus.clientStatus === MayanClientStatus.REFUNDED) {
+  } else if (txStatus.clientStatus === MayanClientStatus.REFUNDED || txStatus.clientStatus === MayanClientStatus.CANCELED) {
     return {
       from: srcChain,
       to: dstChain,
@@ -418,53 +396,24 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
     } satisfies RefundedTransferReceipt<AttestationReceipt<"WormholeCore">>;
 
   } else if (txStatus.clientStatus === MayanClientStatus.INPROGRESS) {
-    switch (state) {
-      case TransferState.SourceInitiated:
-        // Initital transfer vaa from source chain
-        if ("transfer" in attestations && attestations["transfer"]) {
-          return {
-            from: srcChain,
-            to: dstChain,
-            originTxs,
-            state: TransferState.SourceFinalized,
-            attestation: attestations["transfer"],
-          } satisfies SourceFinalizedTransferReceipt<
-            AttestationReceipt<"WormholeCore">
-          >;
-        }
-        break;
+    if (isAttested && destinationTxs.length > 0) {
+      return {
+        from: srcChain,
+        to: dstChain,
+        originTxs,
+        destinationTxs,
+        state: TransferState.DestinationInitiated,
+        attestation: attestation as Required<AttestationReceipt<"WormholeCore">>,
+      } satisfies RedeemedTransferReceipt<AttestationReceipt<"WormholeCore">>;
 
-      case TransferState.DestinationInitiated:
-        if (!attestation) break;
-
-        return {
-          from: srcChain,
-          to: dstChain,
-          originTxs,
-          destinationTxs,
-          state: TransferState.DestinationInitiated,
-          attestation,
-        } satisfies RedeemedTransferReceipt<AttestationReceipt<"WormholeCore">>;
-
-      case TransferState.Failed:
-        return {
-          from: srcChain,
-          to: dstChain,
-          originTxs,
-          destinationTxs,
-          state,
-          error: "Failed to complete transfer",
-        } satisfies FailedTransferReceipt<AttestationReceipt<"WormholeCore">>;
+    } else {
+      return {
+        from: srcChain,
+        to: dstChain,
+        originTxs,
+        state: TransferState.SourceInitiated,
+      } satisfies SourceInitiatedTransferReceipt;
     }
-
-    // This default case occurs if the above breaks trigger
-    return {
-      from: srcChain,
-      to: dstChain,
-      originTxs,
-      state: TransferState.SourceInitiated,
-    } satisfies SourceInitiatedTransferReceipt;
-
   } else {
     throw new Error(`Unknown Mayan clientStatus ${txStatus.clientStatus}`);
   }
