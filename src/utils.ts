@@ -401,6 +401,7 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
       originTxs,
       destinationTxs,
       state: TransferState.DestinationFinalized,
+      // TODO this is a hack. The Receipt type should ideally not require an Attestation.
       attestation: attestation || ({} as AttestationReceipt<"WormholeCore">),
     } satisfies CompletedTransferReceipt<
       AttestationReceipt<"WormholeCore">
