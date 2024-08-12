@@ -410,7 +410,6 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
     >;
 
   } else if (txStatus.clientStatus === MayanClientStatus.REFUNDED) {
-    console.log('refunded!');
     return {
       from: srcChain,
       to: dstChain,
