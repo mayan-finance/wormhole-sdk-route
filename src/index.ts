@@ -32,7 +32,6 @@ import {
   isSourceInitiated,
   nativeChainIds,
   routes,
-  finality,
 } from "@wormhole-foundation/sdk-connect";
 import {
   EvmChains,
@@ -226,7 +225,8 @@ export class MayanRoute<N extends Network>
           amount.denoise(quote.gasDrop, quote.toToken.decimals),
           quote.toToken.decimals
         ),
-        eta: finality.estimateFinalityTime(request.fromChain.chain),
+        /* @ts-ignore TODO: https://github.com/mayan-finance/swap-sdk/pull/11 */
+        eta: quote.etaSeconds,
         details: quote,
       };
       return fullQuote;
