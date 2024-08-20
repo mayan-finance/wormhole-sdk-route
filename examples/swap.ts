@@ -66,14 +66,14 @@ import { getStuff } from "./utils";
     options: bestRoute.getDefaultOptions(),
   };
 
-  let validated = await bestRoute.validate(transferParams);
+  let validated = await bestRoute.validate(tr, transferParams);
   if (!validated.valid) {
     console.error(validated.error);
     return;
   }
   console.log("Validated: ", validated);
 
-  const quote = await bestRoute.quote(validated.params);
+  const quote = await bestRoute.quote(tr, validated.params);
   if (!quote.success) {
     console.error(`Error fetching a quote: ${quote.error.message}`);
     return;
@@ -82,6 +82,7 @@ import { getStuff } from "./utils";
 
   // initiate the transfer
   const receipt = await bestRoute.initiate(
+    tr,
     sender.signer,
     quote,
     receiver.address
