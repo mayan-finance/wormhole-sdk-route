@@ -181,6 +181,7 @@ export class MayanRoute<N extends Network>
       return this.PROTOCOLS.includes(quote.type.toUpperCase())
     });
     if (quotes.length === 0) return undefined;
+    if (quotes.length === 1) return quotes[0];
 
     // Wormhole SDK routes return only a single quote, but Mayan offers multiple quotes (because 
     // Mayan comprises multiple competing protocols). We sort the quotes Mayan gives us and choose
@@ -210,10 +211,9 @@ export class MayanRoute<N extends Network>
         // Should be unreachable
         return 0;
       }
+    });
 
-    })
-
-    return quotes.at(0);
+    return quotes[0];
   }
 
   async quote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<QR> {
