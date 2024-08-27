@@ -55,6 +55,7 @@ export namespace MayanRoute {
   export type Options = {
     gasDrop: number;
     slippage: number;
+    optimizeFor: 'cost' | 'speed';
   };
   export type NormalizedParams = {
     slippageBps: number;
@@ -78,7 +79,9 @@ export class MayanRoute<N extends Network>
   extends routes.AutomaticRoute<N, Op, Vp, R>
   implements routes.StaticRouteMethods<typeof MayanRoute>
 {
+
   MAX_SLIPPAGE = 1;
+  PROTOCOLS = ['WH', 'MCTP', 'SWIFT']; // This is set by classes which extend this class
 
   static NATIVE_GAS_DROPOFF_SUPPORTED = false;
 
@@ -90,6 +93,7 @@ export class MayanRoute<N extends Network>
     return {
       gasDrop: 0,
       slippage: 0.05,
+      optimizeFor: 'cost'
     };
   }
 
@@ -159,7 +163,7 @@ export class MayanRoute<N extends Network>
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  protected async fetchQuote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<MayanQuote> {
+  protected async fetchQuote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<MayanQuote | undefined> {
     const { fromChain, toChain } = request;
 
     const quoteOpts: QuoteParams = {
@@ -173,17 +177,52 @@ export class MayanRoute<N extends Network>
       slippageBps: params.normalizedParams.slippageBps,
     };
 
-    const quotes = await fetchQuote(quoteOpts);
-    if (quotes.length === 0) throw new Error("Failed to find quotes");
+    const quotes = (await fetchQuote(quoteOpts)).filter((quote) => {
+      return this.PROTOCOLS.includes(quote.type.toUpperCase())
+    });
+    if (quotes.length === 0) return undefined;
 
-    // Note: Quotes are sorted by best price
-    return quotes[0]!;
+    quotes.sort((a: MayanQuote, b: MayanQuote) => {
+      // User can provide optimizeFor option to pick the best route. This defaults to "cost"
+      // which just optimizes for highest amount out, but it can be set to "speed" to pick
+      // the fastest route instead.
+
+      if (params.options.optimizeFor === 'cost') {
+        if (b.expectedAmountOut === a.expectedAmountOut) {
+          // If expected amounts out are identical, fall back to speed
+          return a.eta - b.eta
+        } else {
+          // Otherwise sort by amount out, descending
+          return b.expectedAmountOut - a.expectedAmountOut
+        }
+      } else if (params.options.optimizeFor === 'speed') {
+        if (a.eta === b.eta) {
+          // If ETAs are identical, fall back to cost
+          return b.expectedAmountOut - a.expectedAmountOut
+        } else {
+          // Otherwise sort by ETA, ascending
+          return a.eta - b.eta
+        }
+      } else {
+        // Should be unreachable
+        return 0;
+      }
+
+    })
+
+    return quotes.at(0);
   }
 
   async quote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<QR> {
     try {
       const { fromChain, toChain } = request;
       const quote = await this.fetchQuote(request, params);
+      if (!quote) {
+        return {
+          success: false,
+          error: new Error('Could not get Mayan quote'),
+        }
+      }
 
       // TODO: what if source and dest are _both_ EVM?
       const relayFee =
@@ -440,4 +479,37 @@ export class MayanRoute<N extends Network>
   referrerAddress(): ReferrerAddresses | undefined {
     return undefined;
   }
+}
+
+export class MayanRouteWH<N extends Network>
+  extends MayanRoute<N>
+  implements routes.StaticRouteMethods<typeof MayanRouteWH> {
+
+  static override meta = {
+    name: "MayanSwapWH",
+  };
+
+  override PROTOCOLS = ['WH'];
+}
+
+export class MayanRouteMCTP<N extends Network>
+  extends MayanRoute<N>
+  implements routes.StaticRouteMethods<typeof MayanRouteMCTP> {
+
+  static override meta = {
+    name: "MayanSwapMCTP",
+  };
+
+  override PROTOCOLS = ['MCTP'];
+}
+
+export class MayanRouteSWIFT<N extends Network>
+  extends MayanRoute<N>
+  implements routes.StaticRouteMethods<typeof MayanRouteSWIFT> {
+
+  static override meta = {
+    name: "MayanSwapSWIFT",
+  };
+
+  override PROTOCOLS = ['SWIFT'];
 }
