@@ -182,11 +182,14 @@ export class MayanRoute<N extends Network>
     });
     if (quotes.length === 0) return undefined;
 
+    // Wormhole SDK routes return only a single quote, but Mayan offers multiple quotes (because 
+    // Mayan comprises multiple competing protocols). We sort the quotes Mayan gives us and choose
+    // the best one here.
+    //
+    // User can provide optimizeFor option to indicate what they care about. It defaults to "cost"
+    // which just optimizes for highest amount out, but it can also be set to "speed" which will
+    // choose the fastest route instead.
     quotes.sort((a: MayanQuote, b: MayanQuote) => {
-      // User can provide optimizeFor option to pick the best route. This defaults to "cost"
-      // which just optimizes for highest amount out, but it can be set to "speed" to pick
-      // the fastest route instead.
-
       if (params.options.optimizeFor === 'cost') {
         if (b.expectedAmountOut === a.expectedAmountOut) {
           // If expected amounts out are identical, fall back to speed
