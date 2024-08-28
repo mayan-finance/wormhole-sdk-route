@@ -81,7 +81,6 @@ export class MayanRoute<N extends Network>
 {
 
   MAX_SLIPPAGE = 1;
-  PROTOCOLS = ['WH', 'MCTP', 'SWIFT']; // This is set by classes which extend this class
 
   static NATIVE_GAS_DROPOFF_SUPPORTED = false;
 
@@ -93,7 +92,7 @@ export class MayanRoute<N extends Network>
     return {
       gasDrop: 0,
       slippage: 0.05,
-      optimizeFor: 'cost'
+      optimizeFor: 'speed'
     };
   }
 
@@ -177,9 +176,7 @@ export class MayanRoute<N extends Network>
       slippageBps: params.normalizedParams.slippageBps,
     };
 
-    const quotes = (await fetchQuote(quoteOpts)).filter((quote) => {
-      return this.PROTOCOLS.includes(quote.type.toUpperCase())
-    });
+    const quotes = await fetchQuote(quoteOpts);
     if (quotes.length === 0) return undefined;
     if (quotes.length === 1) return quotes[0];
 
@@ -482,37 +479,4 @@ export class MayanRoute<N extends Network>
   referrerAddress(): ReferrerAddresses | undefined {
     return undefined;
   }
-}
-
-export class MayanRouteWH<N extends Network>
-  extends MayanRoute<N>
-  implements routes.StaticRouteMethods<typeof MayanRouteWH> {
-
-  static override meta = {
-    name: "MayanSwapWH",
-  };
-
-  override PROTOCOLS = ['WH'];
-}
-
-export class MayanRouteMCTP<N extends Network>
-  extends MayanRoute<N>
-  implements routes.StaticRouteMethods<typeof MayanRouteMCTP> {
-
-  static override meta = {
-    name: "MayanSwapMCTP",
-  };
-
-  override PROTOCOLS = ['MCTP'];
-}
-
-export class MayanRouteSWIFT<N extends Network>
-  extends MayanRoute<N>
-  implements routes.StaticRouteMethods<typeof MayanRouteSWIFT> {
-
-  static override meta = {
-    name: "MayanSwapSWIFT",
-  };
-
-  override PROTOCOLS = ['SWIFT'];
 }
