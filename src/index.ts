@@ -55,6 +55,7 @@ export namespace MayanRoute {
   export type Options = {
     gasDrop: number;
     slippage: number;
+    optimizeFor: 'cost' | 'speed';
   };
   export type NormalizedParams = {
     slippageBps: number;
@@ -78,9 +79,11 @@ export class MayanRoute<N extends Network>
   extends routes.AutomaticRoute<N, Op, Vp, R>
   implements routes.StaticRouteMethods<typeof MayanRoute>
 {
+
   MAX_SLIPPAGE = 1;
 
   static NATIVE_GAS_DROPOFF_SUPPORTED = false;
+  static IS_AUTOMATIC = true;
 
   static meta = {
     name: "MayanSwap",
@@ -89,7 +92,8 @@ export class MayanRoute<N extends Network>
   getDefaultOptions(): Op {
     return {
       gasDrop: 0,
-      slippage: 0.05,
+      slippage: 0.03,
+      optimizeFor: 'speed'
     };
   }
 
@@ -159,7 +163,7 @@ export class MayanRoute<N extends Network>
       : NATIVE_CONTRACT_ADDRESS;
   }
 
-  protected async fetchQuote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<MayanQuote> {
+  protected async fetchQuote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<MayanQuote | undefined> {
     const { fromChain, toChain } = request;
 
     const quoteOpts: QuoteParams = {
@@ -174,16 +178,55 @@ export class MayanRoute<N extends Network>
     };
 
     const quotes = await fetchQuote(quoteOpts);
-    if (quotes.length === 0) throw new Error("Failed to find quotes");
+    if (quotes.length === 0) return undefined;
+    if (quotes.length === 1) return quotes[0];
 
-    // Note: Quotes are sorted by best price
-    return quotes[0]!;
+    // Wormhole SDK routes return only a single quote, but Mayan offers multiple quotes (because 
+    // Mayan comprises multiple competing protocols). We sort the quotes Mayan gives us and choose
+    // the best one here.
+    //
+    // User can provide optimizeFor option to indicate what they care about. It defaults to "cost"
+    // which just optimizes for highest amount out, but it can also be set to "speed" which will
+    // choose the fastest route instead.
+    quotes.sort((a: MayanQuote, b: MayanQuote) => {
+      if (params.options.optimizeFor === 'cost') {
+        if (b.expectedAmountOut === a.expectedAmountOut) {
+          // If expected amounts out are identical, fall back to speed
+          /* @ts-ignore */
+          return a.etaSeconds - b.etaSeconds
+        } else {
+          // Otherwise sort by amount out, descending
+          return b.expectedAmountOut - a.expectedAmountOut
+        }
+      } else if (params.options.optimizeFor === 'speed') {
+          /* @ts-ignore */
+        if (a.etaSeconds === b.etaSeconds) {
+          // If ETAs are identical, fall back to cost
+          return b.expectedAmountOut - a.expectedAmountOut
+        } else {
+          // Otherwise sort by ETA, ascending
+          /* @ts-ignore */
+          return a.etaSeconds - b.etaSeconds
+        }
+      } else {
+        // Should be unreachable
+        return 0;
+      }
+    });
+
+    return quotes[0];
   }
 
   async quote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<QR> {
     try {
       const { fromChain, toChain } = request;
       const quote = await this.fetchQuote(request, params);
+      if (!quote) {
+        return {
+          success: false,
+          error: new Error('Could not get Mayan quote'),
+        }
+      }
 
       // TODO: what if source and dest are _both_ EVM?
       const relayFee =
@@ -226,7 +269,7 @@ export class MayanRoute<N extends Network>
           quote.toToken.decimals
         ),
         /* @ts-ignore TODO: https://github.com/mayan-finance/swap-sdk/pull/11 */
-        eta: quote.etaSeconds,
+        eta: quote.etaSeconds * 1000,
         details: quote,
       };
       return fullQuote;
