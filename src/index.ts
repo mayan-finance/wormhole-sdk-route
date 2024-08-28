@@ -92,7 +92,7 @@ export class MayanRoute<N extends Network>
   getDefaultOptions(): Op {
     return {
       gasDrop: 0,
-      slippage: 0.05,
+      slippage: 0.03,
       optimizeFor: 'speed'
     };
   }
