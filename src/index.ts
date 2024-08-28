@@ -192,18 +192,21 @@ export class MayanRoute<N extends Network>
       if (params.options.optimizeFor === 'cost') {
         if (b.expectedAmountOut === a.expectedAmountOut) {
           // If expected amounts out are identical, fall back to speed
-          return a.eta - b.eta
+          /* @ts-ignore */
+          return a.etaSeconds - b.etaSeconds
         } else {
           // Otherwise sort by amount out, descending
           return b.expectedAmountOut - a.expectedAmountOut
         }
       } else if (params.options.optimizeFor === 'speed') {
-        if (a.eta === b.eta) {
+          /* @ts-ignore */
+        if (a.etaSeconds === b.etaSeconds) {
           // If ETAs are identical, fall back to cost
           return b.expectedAmountOut - a.expectedAmountOut
         } else {
           // Otherwise sort by ETA, ascending
-          return a.eta - b.eta
+          /* @ts-ignore */
+          return a.etaSeconds - b.etaSeconds
         }
       } else {
         // Should be unreachable
