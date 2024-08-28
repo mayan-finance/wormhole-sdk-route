@@ -83,6 +83,7 @@ export class MayanRoute<N extends Network>
   MAX_SLIPPAGE = 1;
 
   static NATIVE_GAS_DROPOFF_SUPPORTED = false;
+  static override IS_AUTOMATIC = true;
 
   static meta = {
     name: "MayanSwap",
@@ -265,7 +266,7 @@ export class MayanRoute<N extends Network>
           quote.toToken.decimals
         ),
         /* @ts-ignore TODO: https://github.com/mayan-finance/swap-sdk/pull/11 */
-        eta: quote.etaSeconds,
+        eta: quote.etaSeconds * 1000,
         details: quote,
       };
       return fullQuote;
