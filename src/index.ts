@@ -240,9 +240,8 @@ export class MayanRoute<N extends Network>
             circle.usdcContract.get(request.fromChain.network, 'Solana')!
           ),
         },
-        amount: amount.parse(quote.clientRelayerFeeSuccess || '0', 6),
+        amount: amount.parse(amount.denoise(quote.clientRelayerFeeSuccess || '0', 6), 6),
       };
-      console.log('usdc fee');
 
       const fullQuote: Q = {
         success: true,
