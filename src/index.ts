@@ -237,7 +237,7 @@ export class MayanRoute<N extends Network>
         token: {
           chain: 'Solana' as Chain,
           address:  Wormhole.parseAddress('Solana',
-            circle.usdcContract.get(request.fromChain.network, request.fromChain.chain)!
+            circle.usdcContract.get(request.fromChain.network, 'Solana')!
           ),
         },
         amount: amount.parse(quote.clientRelayerFeeSuccess || '0', 6),
