@@ -34,6 +34,9 @@ import {
   routes,
 } from "@wormhole-foundation/sdk-connect";
 import {
+  circle,
+} from "@wormhole-foundation/sdk-base";
+import {
   EvmChains,
   EvmPlatform,
   EvmUnsignedTransaction,
@@ -228,23 +231,17 @@ export class MayanRoute<N extends Network>
         }
       }
 
-      // TODO: what if source and dest are _both_ EVM?
-      const relayFee =
-        quote.fromChain !== "solana"
-          ? {
-              token: request.source.id,
-              amount: amount.parse(
-                amount.denoise(quote.swapRelayerFee, quote.fromToken.decimals),
-                quote.fromToken.decimals
-              ),
-            }
-          : {
-              token: request.destination.id,
-              amount: amount.parse(
-                amount.denoise(quote.redeemRelayerFee, quote.toToken.decimals),
-                quote.toToken.decimals
-              ),
-            };
+      // Mayan fees are complicated and they normalize them for us in USD as clientRelayerFeeSuccess
+      // We return this value as-is and express it as a USDC value for the sake of formatting
+      const relayFee = {
+        token: {
+          chain: 'Solana' as Chain,
+          address:  Wormhole.parseAddress('Solana',
+            circle.usdcContract.get(request.fromChain.network, 'Solana')!
+          ),
+        },
+        amount: amount.parse(amount.denoise(quote.clientRelayerFeeSuccess || '0', 6), 6),
+      };
 
       const fullQuote: Q = {
         success: true,
