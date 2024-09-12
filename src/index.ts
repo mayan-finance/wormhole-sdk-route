@@ -78,9 +78,10 @@ type R = routes.Receipt;
 type Tp = routes.TransferParams<Op>;
 type Vr = routes.ValidationResult<Op>;
 
-export class MayanRoute<N extends Network>
+type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT';
+
+class MayanRouteBase<N extends Network>
   extends routes.AutomaticRoute<N, Op, Vp, R>
-  implements routes.StaticRouteMethods<typeof MayanRoute>
 {
 
   MAX_SLIPPAGE = 1;
@@ -88,9 +89,7 @@ export class MayanRoute<N extends Network>
   static NATIVE_GAS_DROPOFF_SUPPORTED = false;
   static override IS_AUTOMATIC = true;
 
-  static meta = {
-    name: "MayanSwap",
-  };
+  protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT'];
 
   getDefaultOptions(): Op {
     return {
@@ -169,7 +168,7 @@ export class MayanRoute<N extends Network>
   protected async fetchQuote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<MayanQuote | undefined> {
     const { fromChain, toChain } = request;
 
-    const quoteOpts: QuoteParams = {
+    const quoteParams: QuoteParams = {
       amount: Number(params.amount),
       fromToken: this.sourceTokenAddress(request),
       toToken: this.destTokenAddress(request),
@@ -180,7 +179,14 @@ export class MayanRoute<N extends Network>
       slippageBps: params.normalizedParams.slippageBps,
     };
 
-    const quotes = await fetchQuote(quoteOpts);
+    const quoteOpts = {
+      swift: this.protocols.includes('SWIFT'),
+      mctp: this.protocols.includes('MCTP'),
+    };
+
+    const quotes = (await fetchQuote(quoteParams, quoteOpts))
+      .filter((quote) => this.protocols.includes(quote.type));
+
     if (quotes.length === 0) return undefined;
     if (quotes.length === 1) return quotes[0];
 
@@ -480,4 +486,48 @@ export class MayanRoute<N extends Network>
   referrerAddress(): ReferrerAddresses | undefined {
     return undefined;
   }
+}
+
+export class MayanRoute<N extends Network>
+  extends MayanRouteBase<N>
+  implements routes.StaticRouteMethods<typeof MayanRoute> {
+
+  static meta = {
+    name: "MayanSwap",
+  };
+
+  override protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT'];
+}
+
+export class MayanRouteSWIFT<N extends Network>
+  extends MayanRouteBase<N>
+  implements routes.StaticRouteMethods<typeof MayanRouteSWIFT> {
+
+  static meta = {
+    name: "MayanSwapSWIFT",
+  };
+
+  override protocols: MayanProtocol[] = ['SWIFT'];
+}
+
+export class MayanRouteMCTP<N extends Network>
+  extends MayanRouteBase<N>
+  implements routes.StaticRouteMethods<typeof MayanRouteMCTP> {
+
+  static meta = {
+    name: "MayanSwapMCTP",
+  };
+
+  override protocols: MayanProtocol[] = ['MCTP'];
+}
+
+export class MayanRouteWH<N extends Network>
+  extends MayanRouteBase<N>
+  implements routes.StaticRouteMethods<typeof MayanRouteWH> {
+
+  static meta = {
+    name: "MayanSwapWH",
+  };
+
+  override protocols: MayanProtocol[] = ['WH'];
 }
