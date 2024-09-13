@@ -233,7 +233,7 @@ class MayanRouteBase<N extends Network>
       if (!quote) {
         return {
           success: false,
-          error: new Error('Could not get Mayan quote'),
+          error: new routes.UnavailableError(new Error(`Couldn't fetch a quote`)),
         }
       }
 
