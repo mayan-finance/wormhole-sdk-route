@@ -276,7 +276,33 @@ class MayanRouteBase<N extends Network>
         details: quote,
       };
       return fullQuote;
-    } catch (e) {
+    } catch (e: any) {
+      if (e.code && e.code === 'AMOUNT_TOO_SMALL') {
+        // When amount is too small, Mayan SDK returns errors in this format:
+        //
+        // {
+        //   code: "AMOUNT_TOO_SMALL"
+        //   message: "Amount too small (min ~0.00055 ETH)"
+        // }
+        //
+        // We parse this and return a standardized Wormhole SDK MinAmountError
+
+        const amountMatch = e.message.match(/([\d\.]+)/);
+        if (amountMatch[1] !== undefined) {
+          const minAmountFloat = parseFloat(amountMatch[1]);
+          const minAmount = amount.parse(minAmountFloat, request.source.decimals);
+          return {
+            success: false,
+            error: new routes.MinAmountError(minAmount),
+          };
+        } else {
+          // Failed to find a floating point number in the error message
+          return {
+            success: false,
+            error: e,
+          }
+        }
+      }
       return {
         success: false,
         error: e as Error,
