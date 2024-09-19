@@ -57,11 +57,11 @@ import {
 export namespace MayanRoute {
   export type Options = {
     gasDrop: number;
-    slippage: number;
+    slippageBps: number | 'auto';
     optimizeFor: 'cost' | 'speed';
   };
   export type NormalizedParams = {
-    slippageBps: number;
+    slippageBps: number | 'auto';
   };
   export interface ValidatedParams
     extends routes.ValidatedTransferParams<Options> {
@@ -94,7 +94,7 @@ class MayanRouteBase<N extends Network>
   getDefaultOptions(): Op {
     return {
       gasDrop: 0,
-      slippage: 0.03,
+      slippageBps: 'auto',
       optimizeFor: 'speed'
     };
   }
@@ -134,15 +134,12 @@ class MayanRouteBase<N extends Network>
     try {
       params.options = params.options ?? this.getDefaultOptions();
 
-      if (params.options.slippage > this.MAX_SLIPPAGE)
-        throw new Error("Slippage must be less than 100%");
-
       return {
         valid: true,
         params: {
           ...params,
           normalizedParams: {
-            slippageBps: params.options.slippage * 10000,
+            slippageBps: params.options.slippageBps,
           },
         },
       } as Vr;
@@ -176,7 +173,7 @@ class MayanRouteBase<N extends Network>
       toChain: toMayanChainName(toChain.chain),
       ...this.getDefaultOptions(),
       ...params.options,
-      slippageBps: params.normalizedParams.slippageBps,
+      slippageBps: 'auto',
     };
 
     const quoteOpts = {
