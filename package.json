@@ -39,7 +39,7 @@
     "@wormhole-foundation/sdk-connect": "^1.0.0",
     "@wormhole-foundation/sdk-evm": "^1.0.0",
     "@wormhole-foundation/sdk-solana": "^1.0.0",
-    "@solana/web3.js": "^1.95.2",
+    "@solana/web3.js": "^1.95.8",
     "ethers": "^6"
   },
   "devDependencies": {
