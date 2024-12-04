@@ -117,11 +117,14 @@ class MayanRouteBase<N extends Network>
     return supportedChains().includes(chain.chain);
   }
 
-  static supportedDestinationTokens<N extends Network>(
+  static async supportedDestinationTokens<N extends Network>(
     _token: TokenId,
-    _fromChain: ChainContext<N>,
+    fromChain: ChainContext<N>,
     toChain: ChainContext<N>
   ): Promise<TokenId[]> {
+    if (!supportedChains().includes(fromChain.chain) || !supportedChains().includes(toChain.chain)) {
+      return []
+    }
     return fetchTokensForChain(toChain.chain);
   }
 
