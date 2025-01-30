@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "axios": "^1.4.0",
-    "@mayanfinance/swap-sdk": "9.3.0"
+    "@mayanfinance/swap-sdk": "10.0.0"
   },
   "peerDependencies": {
     "@wormhole-foundation/sdk-connect": "^1.0.0",

@@ -78,7 +78,7 @@ type R = routes.Receipt;
 type Tp = routes.TransferParams<Op>;
 type Vr = routes.ValidationResult<Op>;
 
-type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT';
+type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT' | 'SHUTTLE';
 
 class MayanRouteBase<N extends Network>
   extends routes.AutomaticRoute<N, Op, Vp, R>
@@ -89,7 +89,7 @@ class MayanRouteBase<N extends Network>
   static NATIVE_GAS_DROPOFF_SUPPORTED = false;
   static override IS_AUTOMATIC = true;
 
-  protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT'];
+  protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT', 'SHUTTLE'];
 
   getDefaultOptions(): Op {
     return {
@@ -182,6 +182,7 @@ class MayanRouteBase<N extends Network>
     const quoteOpts = {
       swift: this.protocols.includes('SWIFT'),
       mctp: this.protocols.includes('MCTP'),
+      shuttle: this.protocols.includes('SHUTTLE'),
     };
 
     const quotes = (await fetchQuote(quoteParams, quoteOpts))
@@ -522,7 +523,7 @@ export class MayanRoute<N extends Network>
     name: "MayanSwap",
   };
 
-  override protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT'];
+  override protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT', 'SHUTTLE'];
 }
 
 export class MayanRouteSWIFT<N extends Network>
@@ -556,4 +557,15 @@ export class MayanRouteWH<N extends Network>
   };
 
   override protocols: MayanProtocol[] = ['WH'];
+}
+
+export class MayanRouteSHUTTLE<N extends Network>
+  extends MayanRouteBase<N>
+  implements routes.StaticRouteMethods<typeof MayanRouteSHUTTLE> {
+
+  static meta = {
+    name: "MayanSwapSHUTTLE",
+  };
+
+  override protocols: MayanProtocol[] = ['SHUTTLE'];
 }
