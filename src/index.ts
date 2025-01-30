@@ -151,17 +151,9 @@ class MayanRouteBase<N extends Network>
     }
   }
 
-  protected destTokenAddress(request: routes.RouteTransferRequest<N>): string {
-    const { destination } = request;
-    return destination && !isNative(destination.id.address)
-      ? canonicalAddress(destination.id)
-      : NATIVE_CONTRACT_ADDRESS;
-  }
-
-  protected sourceTokenAddress(request: routes.RouteTransferRequest<N>): string {
-    const { source } = request;
-    return !isNative(source.id.address)
-      ? canonicalAddress(source.id)
+  protected toMayanAddress(tokenId: TokenId): string {
+    return !isNative(tokenId.address)
+      ? canonicalAddress(tokenId)
       : NATIVE_CONTRACT_ADDRESS;
   }
 
@@ -170,8 +162,8 @@ class MayanRouteBase<N extends Network>
 
     const quoteParams: QuoteParams = {
       amount: Number(params.amount),
-      fromToken: this.sourceTokenAddress(request),
-      toToken: this.destTokenAddress(request),
+      fromToken: this.toMayanAddress(request.source.id),
+      toToken: this.toMayanAddress(request.destination.id),
       fromChain: toMayanChainName(fromChain.chain),
       toChain: toMayanChainName(toChain.chain),
       ...this.getDefaultOptions(),
@@ -228,7 +220,6 @@ class MayanRouteBase<N extends Network>
 
   async quote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<QR> {
     try {
-      const { fromChain, toChain } = request;
       const quote = await this.fetchQuote(request, params);
       if (!quote) {
         return {
@@ -253,14 +244,14 @@ class MayanRouteBase<N extends Network>
         success: true,
         params,
         sourceToken: {
-          token: Wormhole.tokenId(fromChain.chain, this.sourceTokenAddress(request)),
+          token: request.source.id,
           amount: amount.parse(
             amount.denoise(quote.effectiveAmountIn, quote.fromToken.decimals),
             quote.fromToken.decimals
           ),
         },
         destinationToken: {
-          token: Wormhole.tokenId(toChain.chain, this.destTokenAddress(request)),
+          token: request.destination.id,
           amount: amount.parse(
             amount.denoise(quote.expectedAmountOut, quote.toToken.decimals),
             quote.toToken.decimals
@@ -377,7 +368,7 @@ class MayanRouteBase<N extends Network>
         if (!isNative(request.source.id.address)) {
           const tokenContract = EvmPlatform.getTokenImplementation(
             await request.fromChain.getRpc(),
-            this.sourceTokenAddress(request)
+            this.toMayanAddress(request.source.id)
           );
 
           const contractAddress = addresses.MAYAN_FORWARDER_CONTRACT;
