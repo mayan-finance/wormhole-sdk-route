@@ -280,7 +280,7 @@ class MayanRouteBase<N extends Network>
         // We parse this and return a standardized Wormhole SDK MinAmountError
 
         const amountMatch = e.message.match(/([\d\.]+)/);
-        if (amountMatch[1] !== undefined) {
+        if (amountMatch[1] !== undefined && !e.message.includes('$')) {
           const minAmountFloat = parseFloat(amountMatch[1]);
           const minAmount = amount.parse(minAmountFloat, request.source.decimals);
           return {
