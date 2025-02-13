@@ -13,7 +13,6 @@ import {
   ChainAddress,
   ChainContext,
   Network,
-  RpcConnection,
   Signer,
   SourceInitiatedTransferReceipt,
   TokenId,
@@ -36,7 +35,6 @@ import {
   routes,
 } from "@wormhole-foundation/sdk-connect";
 import {
-  ChainToPlatform,
   circle,
 } from "@wormhole-foundation/sdk-base";
 import {
@@ -84,8 +82,7 @@ type Vr = routes.ValidationResult<Op>;
 type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT' | 'SHUTTLE';
 
 class MayanRouteBase<N extends Network>
-  extends routes.AutomaticRoute<N, Op, Vp, R>
-{
+  extends routes.AutomaticRoute<N, Op, Vp, R> {
 
   MAX_SLIPPAGE = 1;
 
@@ -204,7 +201,7 @@ class MayanRouteBase<N extends Network>
           return b.expectedAmountOut - a.expectedAmountOut
         }
       } else if (params.options.optimizeFor === 'speed') {
-          /* @ts-ignore */
+        /* @ts-ignore */
         if (a.etaSeconds === b.etaSeconds) {
           // If ETAs are identical, fall back to cost
           return b.expectedAmountOut - a.expectedAmountOut
@@ -237,7 +234,7 @@ class MayanRouteBase<N extends Network>
       const relayFee = {
         token: {
           chain: 'Solana' as Chain,
-          address:  Wormhole.parseAddress('Solana',
+          address: Wormhole.parseAddress('Solana',
             circle.usdcContract.get(request.fromChain.network, 'Solana')!
           ),
         },
@@ -305,14 +302,14 @@ class MayanRouteBase<N extends Network>
     }
   }
 
-  protected async transfer (
+  protected async *transfer(
     originAddress: string,
     request: routes.RouteTransferRequest<N>,
+    toAddress: ChainAddress,
     quote: Q,
-    destinationAddress: string,
-    rpc: RpcConnection<ChainToPlatform<Chain>>,
-  ): Promise<UnsignedTransaction<N>[]>  {
-    const txReqs: UnsignedTransaction<N>[] = [];
+  ): AsyncGenerator<UnsignedTransaction<N>> {
+    const destinationAddress = canonicalAddress(toAddress);
+    const rpc = await request.fromChain.getRpc();
     if (request.fromChain.chain === "Solana") {
       const { instructions, signers, lookupTables } =
         await createSwapFromSolanaInstructions(
@@ -329,7 +326,7 @@ class MayanRouteBase<N extends Network>
         recentBlockhash: "",
         addressLookupTableAccounts: lookupTables,
       });
-      txReqs.push(new SolanaUnsignedTransaction(
+      yield new SolanaUnsignedTransaction(
         {
           transaction: new VersionedTransaction(message),
           signers: signers,
@@ -337,7 +334,7 @@ class MayanRouteBase<N extends Network>
         request.fromChain.network,
         request.fromChain.chain,
         "Execute Swap"
-      ))
+      )
     } else {
       const nativeChainId = nativeChainIds.networkChainToNativeChainId.get(
         request.fromChain.network,
@@ -364,17 +361,15 @@ class MayanRouteBase<N extends Network>
             contractAddress,
             amt
           );
-          txReqs.push(
-            new EvmUnsignedTransaction(
-              {
-                from: originAddress,
-                chainId: nativeChainId as bigint,
-                ...txReq,
-              },
-              request.fromChain.network,
-              request.fromChain.chain as EvmChains,
-              "Approve Allowance"
-            )
+          yield new EvmUnsignedTransaction(
+            {
+              from: originAddress,
+              chainId: nativeChainId as bigint,
+              ...txReq,
+            },
+            request.fromChain.network,
+            request.fromChain.chain as EvmChains,
+            "Approve Allowance"
           );
         }
       }
@@ -390,36 +385,29 @@ class MayanRouteBase<N extends Network>
         undefined // permit?
       );
 
-      txReqs.push(
-        new EvmUnsignedTransaction(
-          {
-            from: originAddress,
-            chainId: nativeChainId,
-            ...txReq,
-          },
-          request.fromChain.network,
-          request.fromChain.chain as EvmChains,
-          "Execute Swap"
-        )
+      yield new EvmUnsignedTransaction(
+        {
+          from: originAddress,
+          chainId: nativeChainId,
+          ...txReq,
+        },
+        request.fromChain.network,
+        request.fromChain.chain as EvmChains,
+        "Execute Swap"
       );
     }
-
-    return txReqs;
   }
 
   async initiate(request: routes.RouteTransferRequest<N>, signer: Signer<N>, quote: Q, to: ChainAddress) {
     const originAddress = signer.address();
-    const destinationAddress = canonicalAddress(to);
     try {
       const rpc = await request.fromChain.getRpc();
       const txs: TransactionId[] = [];
-      const txReqs = await this.transfer(
-        originAddress,
-        request,
-        quote,
-        destinationAddress,
-        rpc
-      );
+      const unsignedTxs = this.transfer(originAddress, request, to, quote);
+      const txReqs: UnsignedTransaction<N>[] = [];
+      for await (const tx of unsignedTxs) {
+        txReqs.push(tx);
+      }
       if (request.fromChain.chain === "Solana") {
         if (isSignAndSendSigner(signer)) {
           const txids = await signer.signAndSend(txReqs);
