@@ -512,6 +512,7 @@ export class MayanRoute<N extends Network>
 
   static meta = {
     name: "MayanSwap",
+    provider: "Mayan",
   };
 
   override protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT', 'SHUTTLE'];
@@ -523,6 +524,7 @@ export class MayanRouteSWIFT<N extends Network>
 
   static meta = {
     name: "MayanSwapSWIFT",
+    provider: "Mayan Swift",
   };
 
   override protocols: MayanProtocol[] = ['SWIFT'];
@@ -534,6 +536,7 @@ export class MayanRouteMCTP<N extends Network>
 
   static meta = {
     name: "MayanSwapMCTP",
+    provider: "Mayan MCTP",
   };
 
   override protocols: MayanProtocol[] = ['MCTP'];
@@ -545,6 +548,7 @@ export class MayanRouteWH<N extends Network>
 
   static meta = {
     name: "MayanSwapWH",
+    provider: "Mayan",
   };
 
   override protocols: MayanProtocol[] = ['WH'];
@@ -556,6 +560,7 @@ export class MayanRouteSHUTTLE<N extends Network>
 
   static meta = {
     name: "MayanSwapSHUTTLE",
+    provider: "Mayan Shuttle",
   };
 
   override protocols: MayanProtocol[] = ['SHUTTLE'];
