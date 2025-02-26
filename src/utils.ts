@@ -23,6 +23,9 @@ import {
   routes,
   toChain,
   toNative,
+  circle,
+  Network,
+  Wormhole,
 } from "@wormhole-foundation/sdk-connect";
 import { isEvmNativeSigner } from "@wormhole-foundation/sdk-evm";
 import { SolanaUnsignedTransaction } from "@wormhole-foundation/sdk-solana";
@@ -439,3 +442,15 @@ export async function getTransactionStatus(
   }
   return null;
 }
+
+export function getUSDCTokenId(chain: Chain, network: Network): TokenId | undefined {
+  const usdcContract = circle.usdcContract.get(network, chain);
+  if (!usdcContract) {
+    return undefined;
+  }
+
+  return Wormhole.tokenId(
+    chain,
+    usdcContract,
+  );
+} 

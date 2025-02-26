@@ -50,6 +50,7 @@ import {
   NATIVE_CONTRACT_ADDRESS,
   fetchTokensForChain,
   getTransactionStatus,
+  getUSDCTokenId,
   supportedChains,
   toMayanChainName,
   txStatusToReceipt,
@@ -577,8 +578,32 @@ export class MayanRouteSHUTTLE<N extends Network>
 
   static meta = {
     name: "MayanSwapSHUTTLE",
-    provider: "Mayan Shuttle",
+    provider: "Mayan Shuttle Beta",
   };
 
   override protocols: MayanProtocol[] = ['SHUTTLE'];
+
+  static override supportedSourceTokens(fromChain: ChainContext<Network>): Promise<TokenId[]> {
+    if (!supportedChains().includes(fromChain.chain)) {
+      return Promise.resolve([]);
+    }
+
+    const usdcTokenId = getUSDCTokenId(fromChain.chain, fromChain.network);
+
+    return Promise.resolve(usdcTokenId ? [usdcTokenId] : []);
+  }
+
+  static override supportedDestinationTokens<N extends Network>(
+    _token: TokenId,
+    fromChain: ChainContext<N>,
+    toChain: ChainContext<N>
+  ): Promise<TokenId[]> {
+    if (!supportedChains().includes(fromChain.chain) || !supportedChains().includes(toChain.chain)) {
+      return Promise.resolve([]);
+    }
+
+    const usdcTokenId = getUSDCTokenId(toChain.chain, toChain.network);
+    
+    return Promise.resolve(usdcTokenId ? [usdcTokenId] : []);
+  }
 }
