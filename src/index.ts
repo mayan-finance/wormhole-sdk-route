@@ -583,27 +583,27 @@ export class MayanRouteSHUTTLE<N extends Network>
 
   override protocols: MayanProtocol[] = ['SHUTTLE'];
 
-  static override supportedSourceTokens(fromChain: ChainContext<Network>): Promise<TokenId[]> {
+  static override async supportedSourceTokens(fromChain: ChainContext<Network>): Promise<TokenId[]> {
     if (!supportedChains().includes(fromChain.chain)) {
-      return Promise.resolve([]);
+      return [];
     }
 
     const usdcTokenId = getUSDCTokenId(fromChain.chain, fromChain.network);
 
-    return Promise.resolve(usdcTokenId ? [usdcTokenId] : []);
+    return usdcTokenId ? [usdcTokenId] : [];
   }
 
-  static override supportedDestinationTokens<N extends Network>(
+  static override async supportedDestinationTokens<N extends Network>(
     _token: TokenId,
     fromChain: ChainContext<N>,
     toChain: ChainContext<N>
   ): Promise<TokenId[]> {
     if (!supportedChains().includes(fromChain.chain) || !supportedChains().includes(toChain.chain)) {
-      return Promise.resolve([]);
+      return [];
     }
 
     const usdcTokenId = getUSDCTokenId(toChain.chain, toChain.network);
     
-    return Promise.resolve(usdcTokenId ? [usdcTokenId] : []);
+    return usdcTokenId ? [usdcTokenId] : [];
   }
 }
