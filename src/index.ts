@@ -26,6 +26,7 @@ import {
   isNative,
   isRedeemed,
   isRefunded,
+  isSameToken,
   isSignAndSendSigner,
   isSignOnlySigner,
   isSourceFinalized,
@@ -598,7 +599,12 @@ export class MayanRouteSHUTTLE<N extends Network>
     fromChain: ChainContext<N>,
     toChain: ChainContext<N>
   ): Promise<TokenId[]> {
-    if (!supportedChains().includes(fromChain.chain) || !supportedChains().includes(toChain.chain)) {
+    if (!supportedChains().includes(toChain.chain)) {
+      return [];
+    }
+
+    const supportedSourceTokens = await this.supportedSourceTokens(fromChain);
+    if (!supportedSourceTokens.some((t) => isSameToken(t, _token))) {
       return [];
     }
 
