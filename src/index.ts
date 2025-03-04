@@ -4,6 +4,7 @@ import {
   ReferrerAddresses,
   addresses,
   createSwapFromSolanaInstructions,
+  createSwapFromSuiMoveCalls,
   generateFetchQuoteUrl,
   getSwapFromEvmTxPayload,
 } from "@mayanfinance/swap-sdk";
@@ -46,10 +47,14 @@ import {
   SolanaPlatform,
   SolanaUnsignedTransaction,
 } from "@wormhole-foundation/sdk-solana";
+import {
+  SuiPlatform,
+  SuiUnsignedTransaction,
+} from "@wormhole-foundation/sdk-sui";
 import axios from "axios";
 import {
-  NATIVE_CONTRACT_ADDRESS,
   fetchTokensForChain,
+  getNativeContractAddress,
   getTransactionStatus,
   getUSDCTokenId,
   supportedChains,
@@ -157,7 +162,7 @@ class MayanRouteBase<N extends Network>
   protected toMayanAddress(tokenId: TokenId): string {
     return !isNative(tokenId.address)
       ? canonicalAddress(tokenId)
-      : NATIVE_CONTRACT_ADDRESS;
+      : getNativeContractAddress(tokenId.chain);
   }
 
   protected async fetchQuote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<MayanQuote | undefined> {
@@ -367,6 +372,45 @@ class MayanRouteBase<N extends Network>
         } else if (isSignOnlySigner(signer)) {
           const signed = await signer.sign(txReqs);
           const txids = await SolanaPlatform.sendWait(
+            request.fromChain.chain,
+            rpc,
+            signed
+          );
+          txs.push(
+            ...txids.map((txid) => ({
+              chain: request.fromChain.chain,
+              txid,
+            }))
+          );
+        }
+      } else if (request.fromChain.chain === "Sui") {
+        const tx = await createSwapFromSuiMoveCalls(
+          quote.details!,
+          originAddress,
+          destinationAddress,
+          this.referrerAddress(),
+          undefined,
+          rpc
+        );
+        const txReqs = [
+          new SuiUnsignedTransaction(
+            tx,
+            request.fromChain.network,
+            request.fromChain.chain,
+            "Execute Swap"
+          ),
+        ];
+        if (isSignAndSendSigner(signer)) {
+          const txids = await signer.signAndSend(txReqs);
+          txs.push(
+            ...txids.map((txid) => ({
+              chain: request.fromChain.chain,
+              txid,
+            }))
+          );
+        } else if (isSignOnlySigner(signer)) {
+          const signed = await signer.sign(txReqs);
+          const txids = await SuiPlatform.sendWait(
             request.fromChain.chain,
             rpc,
             signed

@@ -33,8 +33,10 @@ import axios from "axios";
 import { ethers } from "ethers";
 import tokenCache from "./tokens.json";
 
-export const NATIVE_CONTRACT_ADDRESS =
-  "0x0000000000000000000000000000000000000000";
+export function getNativeContractAddress(chain: Chain): string {
+  if (chain === "Sui") return "0x2::sui::SUI";
+  return "0x0000000000000000000000000000000000000000";
+}
 
 // Deadline in minutes recommended by api
 // hardcoded for now, but can be fetched from
@@ -50,6 +52,7 @@ const defaultDeadlines: {
   Arbitrum: 96,
   Aptos: 50,
   Unichain: 96,
+  Sui: 40,
 };
 
 // return the default deadline for a given chain in seconds
@@ -70,6 +73,7 @@ const chainNameMap = {
   Base: "base",
   Optimism: "optimism",
   Unichain: "unichain",
+  Sui: "sui",
 } as Record<Chain, MayanChainName>;
 
 export function toMayanChainName(chain: Chain): MayanChainName {
@@ -113,7 +117,7 @@ export async function fetchTokensForChain(chain: Chain): Promise<TokenId[]> {
   }
 
   const whTokens: TokenId[] = mayanTokens.map((mt: MayanToken): TokenId => {
-    if (mt.contract === NATIVE_CONTRACT_ADDRESS) {
+    if (mt.contract === getNativeContractAddress(chain)) {
       return nativeTokenId(chain);
     } else {
       return {
