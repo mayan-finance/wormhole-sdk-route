@@ -49,6 +49,7 @@ const defaultDeadlines: {
   Solana: 10,
   Arbitrum: 96,
   Aptos: 50,
+  Sui: 40,
 };
 
 // return the default deadline for a given chain in seconds
@@ -68,6 +69,7 @@ const chainNameMap = {
   Aptos: "aptos",
   Base: "base",
   Optimism: "optimism",
+  Sui: 'sui',
 } as Record<Chain, MayanChainName>;
 
 export function toMayanChainName(chain: Chain): MayanChainName {
