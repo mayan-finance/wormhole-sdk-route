@@ -1,6 +1,6 @@
 {
   "name": "@mayanfinance/wormhole-sdk-route",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "license": "Apache-2.0",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "axios": "^1.4.0",
-    "@mayanfinance/swap-sdk": "10.2.0"
+    "@mayanfinance/swap-sdk": "10.3.0"
   },
   "peerDependencies": {
     "@wormhole-foundation/sdk-connect": "^1.0.0",
