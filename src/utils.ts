@@ -311,8 +311,8 @@ export interface Tx {
 }
 
 export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
-  const srcChain = toWormholeChainName(txStatus.sourceChain as MayanChainName);
-  const dstChain = toWormholeChainName(txStatus.destChain as MayanChainName);
+  const srcChain = toWormholeChainName(txStatus.sourceChain);
+  const dstChain = toWormholeChainName(txStatus.destChain);
 
   const originTxs = txStatus.txs
     .filter((tx) => {
@@ -344,7 +344,7 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
   let refundTxs = [];
   if (txStatus.refundTxHash) {
     refundTxs.push({
-      chain: fromMayanChainName(txStatus.refundChain as MayanChainName),
+      chain: toWormholeChainName(txStatus.refundChain),
       txid: txStatus.refundTxHash
     });
   }
