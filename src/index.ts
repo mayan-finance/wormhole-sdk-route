@@ -86,7 +86,7 @@ type R = routes.Receipt;
 type Tp = routes.TransferParams<Op>;
 type Vr = routes.ValidationResult<Op>;
 
-type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT' | 'SHUTTLE';
+type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT' | 'SHUTTLE' | 'FAST_MCTP';
 
 class MayanRouteBase<N extends Network>
   extends routes.AutomaticRoute<N, Op, Vp, R>
@@ -265,6 +265,8 @@ class MayanRouteBase<N extends Network>
         amount: amount.parse(amount.denoise(quote.clientRelayerFeeSuccess || '0', 6), 6),
       };
 
+      const expires = quote.deadline64 ? new Date(parseInt(quote.deadline64, 10) * 1000) : undefined;
+
       const fullQuote: Q = {
         success: true,
         params,
@@ -287,9 +289,9 @@ class MayanRouteBase<N extends Network>
           amount.denoise(quote.gasDrop, quote.toToken.decimals),
           quote.toToken.decimals
         ),
-        /* @ts-ignore TODO: https://github.com/mayan-finance/swap-sdk/pull/11 */
         eta: quote.etaSeconds * 1000,
         details: quote,
+        expires,
       };
       return fullQuote;
     } catch (e: any) {
