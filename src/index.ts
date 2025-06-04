@@ -182,6 +182,7 @@ class MayanRouteBase<N extends Network>
     const quoteOpts = {
       swift: this.protocols.includes('SWIFT'),
       mctp: this.protocols.includes('MCTP'),
+      fastMctp: this.protocols.includes('FAST_MCTP'),
       shuttle: this.protocols.includes('SHUTTLE'),
     };
 
@@ -606,6 +607,19 @@ export class MayanRouteMCTP<N extends Network>
 
   override protocols: MayanProtocol[] = ['MCTP'];
 }
+
+export class MayanRouteFAST_MCTP<N extends Network>
+  extends MayanRouteBase<N>
+  implements routes.StaticRouteMethods<typeof MayanRouteFAST_MCTP> {
+
+  static meta = {
+    name: "MayanSwapFAST_MCTP",
+    provider: "Mayan Fast MCTP",
+  };
+
+  override protocols: MayanProtocol[] = ['FAST_MCTP'];
+}
+
 
 export class MayanRouteWH<N extends Network>
   extends MayanRouteBase<N>
