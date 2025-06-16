@@ -27,7 +27,6 @@ import {
   isNative,
   isRedeemed,
   isRefunded,
-  isSameToken,
   isSignAndSendSigner,
   isSignOnlySigner,
   isSourceFinalized,
@@ -56,7 +55,6 @@ import {
   fetchTokensForChain,
   getNativeContractAddress,
   getTransactionStatus,
-  getUSDCTokenId,
   supportedChains,
   toMayanChainName,
   txStatusToReceipt,
@@ -86,7 +84,7 @@ type R = routes.Receipt;
 type Tp = routes.TransferParams<Op>;
 type Vr = routes.ValidationResult<Op>;
 
-type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT' | 'SHUTTLE' | 'FAST_MCTP';
+type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT' | 'FAST_MCTP' | 'SHUTTLE';
 
 class MayanRouteBase<N extends Network>
   extends routes.AutomaticRoute<N, Op, Vp, R>
@@ -97,7 +95,7 @@ class MayanRouteBase<N extends Network>
   static NATIVE_GAS_DROPOFF_SUPPORTED = false;
   static override IS_AUTOMATIC = true;
 
-  protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT', 'SHUTTLE'];
+  protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT'];
 
   getDefaultOptions(): Op {
     return {
@@ -182,7 +180,6 @@ class MayanRouteBase<N extends Network>
     const quoteOpts = {
       swift: this.protocols.includes('SWIFT'),
       mctp: this.protocols.includes('MCTP'),
-      shuttle: this.protocols.includes('SHUTTLE'),
     };
 
     const fetchQuoteUrl = new URL(generateFetchQuoteUrl(quoteParams, quoteOpts));
@@ -580,7 +577,7 @@ export class MayanRoute<N extends Network>
     provider: "Mayan",
   };
 
-  override protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT', 'SHUTTLE'];
+  override protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT'];
 }
 
 export class MayanRouteSWIFT<N extends Network>
@@ -617,45 +614,4 @@ export class MayanRouteWH<N extends Network>
   };
 
   override protocols: MayanProtocol[] = ['WH'];
-}
-
-export class MayanRouteSHUTTLE<N extends Network>
-  extends MayanRouteBase<N>
-  implements routes.StaticRouteMethods<typeof MayanRouteSHUTTLE> {
-
-  static meta = {
-    name: "MayanSwapSHUTTLE",
-    provider: "Mayan Shuttle Beta",
-  };
-
-  override protocols: MayanProtocol[] = ['SHUTTLE'];
-
-  static override async supportedSourceTokens(fromChain: ChainContext<Network>): Promise<TokenId[]> {
-    if (!supportedChains().includes(fromChain.chain)) {
-      return [];
-    }
-
-    const usdcTokenId = getUSDCTokenId(fromChain.chain, fromChain.network);
-
-    return usdcTokenId ? [usdcTokenId] : [];
-  }
-
-  static override async supportedDestinationTokens<N extends Network>(
-    _token: TokenId,
-    fromChain: ChainContext<N>,
-    toChain: ChainContext<N>
-  ): Promise<TokenId[]> {
-    if (!supportedChains().includes(toChain.chain)) {
-      return [];
-    }
-
-    const supportedSourceTokens = await this.supportedSourceTokens(fromChain);
-    if (!supportedSourceTokens.some((t) => isSameToken(t, _token))) {
-      return [];
-    }
-
-    const usdcTokenId = getUSDCTokenId(toChain.chain, toChain.network);
-    
-    return usdcTokenId ? [usdcTokenId] : [];
-  }
 }
