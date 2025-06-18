@@ -86,6 +86,10 @@ type Vr = routes.ValidationResult<Op>;
 
 type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT' | 'FAST_MCTP' | 'SHUTTLE';
 
+type ReferrerParams = Pick<QuoteParams, 'referrerBps'> & {
+  referrers?: Partial<Record<Chain, string>>;
+};
+
 class MayanRouteBase<N extends Network>
   extends routes.AutomaticRoute<N, Op, Vp, R>
 {
@@ -174,6 +178,7 @@ class MayanRouteBase<N extends Network>
       toChain: toMayanChainName(toChain.chain),
       ...this.getDefaultOptions(),
       ...params.options,
+      ...this.getReferralParameters(),
       slippageBps: 'auto',
     };
 
@@ -204,7 +209,7 @@ class MayanRouteBase<N extends Network>
     if (!quotes || quotes.length === 0) return undefined;
     if (quotes.length === 1) return quotes[0];
 
-    // Wormhole SDK routes return only a single quote, but Mayan offers multiple quotes (because 
+    // Wormhole SDK routes return only a single quote, but Mayan offers multiple quotes (because
     // Mayan comprises multiple competing protocols). We sort the quotes Mayan gives us and choose
     // the best one here.
     //
@@ -222,7 +227,7 @@ class MayanRouteBase<N extends Network>
           return b.expectedAmountOut - a.expectedAmountOut
         }
       } else if (params.options.optimizeFor === 'speed') {
-          /* @ts-ignore */
+        /* @ts-ignore */
         if (a.etaSeconds === b.etaSeconds) {
           // If ETAs are identical, fall back to cost
           return b.expectedAmountOut - a.expectedAmountOut
@@ -564,7 +569,26 @@ class MayanRouteBase<N extends Network>
   }
 
   referrerAddress(): ReferrerAddresses | undefined {
-    return undefined;
+    const { referrers } = this.constructor as ReferrerParams;
+
+    if (!referrers || Object.keys(referrers).length < 1) {
+      return undefined;
+    }
+
+    return {
+      solana: referrers.Solana || null,
+      evm: referrers.Ethereum || null,
+      sui: referrers.Sui || null,
+    };
+  }
+
+  getReferralParameters(): Pick<QuoteParams, 'referrerBps' | 'referrer'>  {
+    const { referrers, referrerBps } = this.constructor as ReferrerParams;
+
+    return referrers?.Solana ? {
+      referrer: referrers.Solana,
+      referrerBps,
+    } : {};
   }
 }
 
@@ -613,5 +637,20 @@ export class MayanRouteWH<N extends Network>
     provider: "Mayan",
   };
 
-  override protocols: MayanProtocol[] = ['WH'];
+  override protocols: MayanProtocol[] = ["WH"];
+}
+
+export function createMayanRouteWithReferrerFee<
+  N extends Network,
+  T extends
+    | typeof MayanRoute<N>
+    | typeof MayanRouteSWIFT<N>
+    | typeof MayanRouteMCTP<N>
+    | typeof MayanRouteWH<N>,
+>(classConstructor: T, properties: ReferrerParams = {}): T & ReferrerParams {
+  if (properties?.referrers) {
+    Object.assign(classConstructor, properties);
+  }
+
+  return classConstructor as T & ReferrerParams;
 }
