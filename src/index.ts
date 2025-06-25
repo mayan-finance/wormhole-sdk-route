@@ -344,7 +344,8 @@ class MayanRouteBase<N extends Network>
             originAddress,
             destinationAddress,
             this.referrerAddress(),
-            rpc
+            rpc,
+            { allowSwapperOffCurve: true },
           );
 
         const message = MessageV0.compile({
