@@ -86,7 +86,8 @@ type Vr = routes.ValidationResult<Op>;
 
 type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT' | 'FAST_MCTP' | 'SHUTTLE';
 
-type ReferrerParams = Pick<QuoteParams, 'referrerBps'> & {
+type ReferrerParams<N extends Network> = {
+  getReferrerBps?: (request: routes.RouteTransferRequest<N>) => number;
   referrers?: Partial<Record<Chain, string>>;
 };
 
@@ -169,7 +170,7 @@ class MayanRouteBase<N extends Network>
 
   protected async fetchQuote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<MayanQuote | undefined> {
     const { fromChain, toChain } = request;
-
+    
     const quoteParams: QuoteParams = {
       amount: Number(params.amount),
       fromToken: this.toMayanAddress(request.source.id),
@@ -178,7 +179,7 @@ class MayanRouteBase<N extends Network>
       toChain: toMayanChainName(toChain.chain),
       ...this.getDefaultOptions(),
       ...params.options,
-      ...this.getReferralParameters(),
+      ...this.getReferralParameters(request),
       slippageBps: 'auto',
     };
 
@@ -570,7 +571,7 @@ class MayanRouteBase<N extends Network>
   }
 
   referrerAddress(): ReferrerAddresses | undefined {
-    const { referrers } = this.constructor as ReferrerParams;
+    const { referrers } = this.constructor as ReferrerParams<N>;
 
     if (!referrers || Object.keys(referrers).length < 1) {
       return undefined;
@@ -583,12 +584,13 @@ class MayanRouteBase<N extends Network>
     };
   }
 
-  getReferralParameters(): Pick<QuoteParams, 'referrerBps' | 'referrer'>  {
-    const { referrers, referrerBps } = this.constructor as ReferrerParams;
+  getReferralParameters(request: routes.RouteTransferRequest<N>): Pick<QuoteParams, 'referrerBps' | 'referrer'>  {
+    const { referrers, getReferrerBps } = this.constructor as ReferrerParams<N>;
+    const isReferralEnabled = !!referrers?.Solana && typeof getReferrerBps === "function";
 
-    return referrers?.Solana ? {
+    return isReferralEnabled ? {
       referrer: referrers.Solana,
-      referrerBps,
+      referrerBps: getReferrerBps(request),
     } : {};
   }
 }
@@ -648,10 +650,10 @@ export function createMayanRouteWithReferrerFee<
     | typeof MayanRouteSWIFT<N>
     | typeof MayanRouteMCTP<N>
     | typeof MayanRouteWH<N>,
->(classConstructor: T, properties: ReferrerParams = {}): T & ReferrerParams {
-  if (properties?.referrers) {
+>(classConstructor: T, properties: ReferrerParams<N> = {}): T & ReferrerParams<N> {
+  if (properties?.referrers && typeof properties?.getReferrerBps === "function") {
     Object.assign(classConstructor, properties);
   }
 
-  return classConstructor as T & ReferrerParams;
+  return classConstructor as T & ReferrerParams<N>;
 }
