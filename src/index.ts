@@ -298,32 +298,40 @@ class MayanRouteBase<N extends Network>
       };
       return fullQuote;
     } catch (e: any) {
-      if (e.code && e.code === 'AMOUNT_TOO_SMALL') {
-        // When amount is too small, Mayan SDK returns errors in this format:
-        //
-        // {
-        //   code: "AMOUNT_TOO_SMALL"
-        //   message: "Amount too small (min ~0.00055 ETH)"
-        // }
-        //
-        // We parse this and return a standardized Wormhole SDK MinAmountError
+      if (axios.isAxiosError(e)) {
+        const data = e?.response?.data;
 
-        const amountMatch = e.message.match(/([\d\.]+)/);
-        if (amountMatch[1] !== undefined && !e.message.includes('$')) {
-          const minAmountFloat = parseFloat(amountMatch[1]);
-          const minAmount = amount.parse(minAmountFloat, request.source.decimals);
-          return {
-            success: false,
-            error: new routes.MinAmountError(minAmount),
-          };
-        } else {
-          // Failed to find a floating point number in the error message
-          return {
-            success: false,
-            error: e,
+        if (data?.code === 'AMOUNT_TOO_SMALL') {
+          // When amount is too small, Mayan SDK returns errors in this format:
+          //
+          // {
+          //   code: "AMOUNT_TOO_SMALL",
+          //   data: { minAmountIn: 0.00055 },
+          //   message: "Amount too small (min ~0.00055 ETH)"
+          // }
+          //
+          // We parse this and return a standardized Wormhole SDK MinAmountError
+
+          const minAmountIn = data?.data?.minAmountIn;
+
+          if (typeof minAmountIn === "number") {
+            const minAmount = amount.parse(minAmountIn, request.source.decimals);
+
+            return {
+              success: false,
+              error: new routes.MinAmountError(minAmount),
+            };
           }
         }
+
+        if (data?.msg) {
+          return {
+            success: false,
+            error: Error(data?.msg, { cause: data }),
+          };
+        }
       }
+
       return {
         success: false,
         error: e as Error,
