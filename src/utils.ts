@@ -80,7 +80,7 @@ const chainNameMap = {
 // Only Solana, Ethereum, Base, Sui, and Monad are supported on testnet
 const testnetSupportedChainMap: Partial<Record<Chain, MayanTestnetChainName>> = {
   Solana: "solana",
-  Ethereum: "ethereum",  
+  Ethereum: "ethereum",
   Base: "base",
   Sui: "sui",
   Monad: "monad",

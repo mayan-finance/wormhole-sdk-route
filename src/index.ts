@@ -190,7 +190,6 @@ class MayanRouteBase<N extends Network>
   protected async fetchQuote(request: routes.RouteTransferRequest<N>, params: Vp): Promise<MayanQuote | undefined> {
     const { fromChain, toChain } = request;
     
-    // Validate testnet chains are supported
     if (this.isTestnetRequest(request)) {
       if (!isTestnetSupportedChain(fromChain.chain)) {
         throw new Error(`Chain ${fromChain.chain} is not supported on testnet. Supported testnet chains: ${supportedChains("Testnet").join(", ")}`);
@@ -199,7 +198,7 @@ class MayanRouteBase<N extends Network>
         throw new Error(`Chain ${toChain.chain} is not supported on testnet. Supported testnet chains: ${supportedChains("Testnet").join(", ")}`);
       }
     }
-    
+
     const quoteParams: QuoteParams = {
       amount: Number(params.amount),
       fromToken: this.toMayanAddress(request.source.id),
@@ -228,7 +227,7 @@ class MayanRouteBase<N extends Network>
               fromChain: toMayanChainName(fromChain.network, fromChain.chain),
               /* @ts-ignore */
               toChain: toMayanChainName(toChain.network, toChain.chain),
-            }, 
+            },
             quoteOpts
           )
         : generateFetchQuoteUrl(quoteParams, quoteOpts)
