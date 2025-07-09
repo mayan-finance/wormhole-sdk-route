@@ -32,9 +32,9 @@
     "example:swap": "npx tsx examples/swap.ts"
   },
   "dependencies": {
-    "axios": "^1.10.0",
     "@mayanfinance/swap-sdk": "10.8.0",
-    "@testnet-mayan/swap-sdk": "^1.2.0"
+    "@testnet-mayan/swap-sdk": "^1.2.0",
+    "axios": "^1.10.0"
   },
   "peerDependencies": {
     "@solana/web3.js": "^1.95.8",
