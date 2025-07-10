@@ -92,7 +92,7 @@ type R = routes.Receipt;
 type Tp = routes.TransferParams<Op>;
 type Vr = routes.ValidationResult<Op>;
 
-type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT' | 'FAST_MCTP' | 'SHUTTLE';
+type MayanProtocol = 'WH' | 'MCTP' | 'SWIFT' | 'FAST_MCTP' | 'SHUTTLE' | 'MONO_CHAIN';
 
 type ReferrerParams<N extends Network> = {
   getReferrerBps?: (request: routes.RouteTransferRequest<N>) => number;
@@ -108,7 +108,7 @@ class MayanRouteBase<N extends Network>
   static NATIVE_GAS_DROPOFF_SUPPORTED = false;
   static override IS_AUTOMATIC = true;
 
-  protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT'];
+  protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT', 'MONO_CHAIN'];
 
   protected isTestnetRequest(request: routes.RouteTransferRequest<N>): boolean {
     // A request is considered testnet if either the source or destination chain is on testnet
@@ -216,6 +216,7 @@ class MayanRouteBase<N extends Network>
     const quoteOpts = {
       swift: this.protocols.includes('SWIFT'),
       mctp: this.protocols.includes('MCTP'),
+      monoChain: this.protocols.includes('MONO_CHAIN'),
     };
 
     const fetchQuoteUrl = new URL(
@@ -685,7 +686,7 @@ export class MayanRoute<N extends Network>
     provider: "Mayan",
   };
 
-  override protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT'];
+  override protocols: MayanProtocol[] = ['WH', 'MCTP', 'SWIFT', 'MONO_CHAIN'];
 }
 
 export class MayanRouteSWIFT<N extends Network>
@@ -724,13 +725,26 @@ export class MayanRouteWH<N extends Network>
   override protocols: MayanProtocol[] = ["WH"];
 }
 
+export class MayanRouteMONOCHAIN<N extends Network>
+  extends MayanRouteBase<N>
+  implements routes.StaticRouteMethods<typeof MayanRouteMONOCHAIN> {
+
+  static meta = {
+    name: "MayanSwapMONOCHAIN",
+    provider: "Mayan Mono Chain",
+  };
+
+  override protocols: MayanProtocol[] = ["MONO_CHAIN"];
+}
+
 export function createMayanRouteWithReferrerFee<
   N extends Network,
   T extends
     | typeof MayanRoute<N>
     | typeof MayanRouteSWIFT<N>
     | typeof MayanRouteMCTP<N>
-    | typeof MayanRouteWH<N>,
+    | typeof MayanRouteWH<N>
+    | typeof MayanRouteMONOCHAIN<N>,
 >(classConstructor: T, properties: ReferrerParams<N> = {}): T & ReferrerParams<N> {
   if (properties?.referrers && typeof properties?.getReferrerBps === "function") {
     Object.assign(classConstructor, properties);
