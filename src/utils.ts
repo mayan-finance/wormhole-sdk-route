@@ -1,9 +1,12 @@
 import {
   ChainName as MayanChainName,
-  Token as MayanToken,
   SolanaTransactionSigner,
-  fetchTokenList,
 } from "@mayanfinance/swap-sdk";
+import {
+  ChainName as MayanTestnetChainName,
+} from "@testnet-mayan/swap-sdk";
+
+// Testnet chain names supported by @testnet-mayan/swap-sdk
 import { Transaction, VersionedTransaction } from "@solana/web3.js";
 import {
   AttestationReceipt,
@@ -19,10 +22,8 @@ import {
   deserialize,
   encoding,
   isSignOnlySigner,
-  nativeTokenId,
   routes,
   toChain,
-  toNative,
   circle,
   Network,
   Wormhole,
@@ -31,7 +32,6 @@ import { isEvmNativeSigner } from "@wormhole-foundation/sdk-evm";
 import { SolanaUnsignedTransaction } from "@wormhole-foundation/sdk-solana";
 import axios from "axios";
 import { ethers } from "ethers";
-import tokenCache from "./tokens.json";
 
 export function getNativeContractAddress(chain: Chain): string {
   if (chain === "Sui") return "0x2::sui::SUI";
@@ -76,9 +76,29 @@ const chainNameMap = {
   Sui: "sui",
 } as Record<Chain, MayanChainName>;
 
-export function toMayanChainName(chain: Chain): MayanChainName {
-  if (!chainNameMap[chain]) throw new Error(`Chain ${chain} not supported`);
-  return chainNameMap[chain] as MayanChainName;
+// Mapping of Wormhole chains to testnet Mayan chain names
+// Only Solana, Ethereum, Base, Sui, and Monad are supported on testnet
+const testnetSupportedChainMap: Partial<Record<Chain, MayanTestnetChainName>> = {
+  Solana: "solana",
+  Ethereum: "ethereum",
+  Base: "base",
+  Sui: "sui",
+  Monad: "monad",
+};
+
+export function toMayanChainName(network: Network, chain: Chain): MayanChainName | MayanTestnetChainName {
+  if (network === 'Mainnet') {
+    if (!chainNameMap[chain]) throw new Error(`Chain ${chain} not supported`);
+    return chainNameMap[chain] as MayanChainName;
+  } else if (network === 'Testnet') {
+    if (!testnetSupportedChainMap[chain]) throw new Error(`Chain ${chain} not supported`);
+    return testnetSupportedChainMap[chain] as MayanChainName;
+  }
+  throw new Error(`Unsupported network: ${network}`);
+}
+
+export function isTestnetSupportedChain(chain: Chain): boolean {
+  return testnetSupportedChainMap[chain] !== undefined;
 }
 
 export function fromMayanChainName(mayanChain: MayanChainName): Chain {
@@ -95,40 +115,12 @@ export function toWormholeChainName(chainIdStr: string): Chain {
   return toChain(Number(chainIdStr));
 }
 
-export function supportedChains(): Chain[] {
+export function supportedChains(network?: Network): Chain[] {
+  if (network === "Testnet") {
+    // Return only chains that are supported on testnet
+    return Object.keys(testnetSupportedChainMap) as Chain[];
+  }
   return Object.keys(chainNameMap) as Chain[];
-}
-
-let tokenListCache = {} as Record<Chain, TokenId[]>;
-
-export async function fetchTokensForChain(chain: Chain): Promise<TokenId[]> {
-  if (chain in tokenListCache) {
-    return tokenListCache[chain] as TokenId[];
-  }
-
-  let mayanTokens: MayanToken[];
-  let chainName = toMayanChainName(chain);
-  try {
-    mayanTokens = await fetchTokenList(chainName);
-  } catch (e) {
-    mayanTokens = (tokenCache as Record<MayanChainName, MayanToken[]>)[
-      chainName
-    ];
-  }
-
-  const whTokens: TokenId[] = mayanTokens.map((mt: MayanToken): TokenId => {
-    if (mt.contract === getNativeContractAddress(chain)) {
-      return nativeTokenId(chain);
-    } else {
-      return {
-        chain,
-        address: toNative(chain, mt.contract),
-      } as TokenId;
-    }
-  });
-
-  tokenListCache[chain] = whTokens;
-  return whTokens;
 }
 
 // https://solana-labs.github.io/solana-web3.js/classes/Transaction.html
@@ -429,9 +421,10 @@ export function txStatusToReceipt(txStatus: TransactionStatus): routes.Receipt {
 }
 
 export async function getTransactionStatus(
+  network: Network,
   tx: TransactionId
 ): Promise<TransactionStatus | null> {
-  const url = `https://explorer-api.mayan.finance/v3/swap/trx/${tx.txid}`;
+  const url = `https://${{Mainnet: "", Testnet: "testnet-", Devnet: ""}[network]}explorer-api.mayan.finance/v3/swap/trx/${tx.txid}`;
   try {
     const response = await axios.get<TransactionStatus>(url);
     if (response.data.id) return response.data;
