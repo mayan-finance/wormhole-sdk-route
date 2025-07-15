@@ -43,6 +43,7 @@ import {
   routes,
 } from "@wormhole-foundation/sdk-connect";
 import {
+  chainToPlatform,
   circle,
 } from "@wormhole-foundation/sdk-base";
 import {
@@ -735,6 +736,12 @@ export class MayanRouteMONOCHAIN<N extends Network>
   };
 
   override protocols: MayanProtocol[] = ["MONO_CHAIN"];
+
+  static supportsSameChainSwaps(network: Network, chain: Chain) {
+    const platform = chainToPlatform(chain);
+    const isPlatformSupported = platform === 'Solana' || platform === 'Evm';
+    return network === "Mainnet" && isPlatformSupported;
+  }
 }
 
 export function createMayanRouteWithReferrerFee<
