@@ -32,7 +32,7 @@
     "example:swap": "npx tsx examples/swap.ts"
   },
   "dependencies": {
-    "@mayanfinance/swap-sdk": "10.9.0",
+    "@mayanfinance/swap-sdk": "10.9.2",
     "@testnet-mayan/swap-sdk": "^1.2.0",
     "axios": "^1.10.0"
   },
