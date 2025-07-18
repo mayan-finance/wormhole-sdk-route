@@ -313,7 +313,8 @@ class MayanRouteBase<N extends Network>
         amount: amount.parse(amount.denoise(quote.clientRelayerFeeSuccess || '0', 6), 6),
       };
 
-      const expires = quote.deadline64 ? new Date(parseInt(quote.deadline64, 10) * 1000) : undefined;
+      const deadline64Seconds = parseInt(quote.deadline64, 10) * 1000;
+      const expires = deadline64Seconds ? new Date(deadline64Seconds) : undefined;
 
       const fullQuote: Q = {
         success: true,
