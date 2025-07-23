@@ -14,8 +14,6 @@ import {
   createSwapFromSuiMoveCalls as createSwapFromSuiMoveCallsTestnet,
   getSwapFromEvmTxPayload as getSwapFromEvmTxPayloadTestnet,
 } from '@testnet-mayan/swap-sdk';
-
-import { MessageV0, PublicKey, VersionedTransaction } from '@solana/web3.js';
 import {
   Chain,
   ChainAddress,
@@ -64,6 +62,19 @@ import {
   isTestnetSupportedChain,
   txStatusToReceipt,
 } from './utils';
+import {
+  createAssociatedTokenAccountIdempotentInstruction,
+  createTransferInstruction,
+  getAssociatedTokenAddressSync,
+} from '@solana/spl-token';
+import {
+  Connection,
+  MessageV0,
+  PublicKey,
+  SystemProgram,
+  TransactionInstruction,
+  VersionedTransaction,
+} from '@solana/web3.js';
 
 export namespace MayanRoute {
   export type Options = {
@@ -100,6 +111,7 @@ type MayanProtocol =
 type ReferrerParams<N extends Network> = {
   getReferrerBps?: (request: routes.RouteTransferRequest<N>) => number;
   referrers?: Partial<Record<Chain, string>>;
+  isV2?: boolean;
 };
 
 class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
@@ -200,6 +212,142 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
       : getNativeContractAddress(tokenId.chain);
   }
 
+  getFeeInBaseUnits(
+    request: routes.RouteTransferRequest<N>,
+    amountString: string,
+  ) {
+    const { fromChain, source } = request;
+    const referralParams = this.getReferralParameters(request);
+    const { referrerBps, referrer, isV2 } = referralParams;
+
+    // TODO remove solana check when all chains are ready
+    const isSolana = fromChain.chain === 'Solana';
+
+    // TODO remove solana check when all chains are ready
+    if (!referrerBps || !referrer || !isSolana || !isV2) {
+      return 0n;
+    }
+
+    const amt = amount.parse(amountString, source.decimals);
+    const MAX_U16 = 65_535n;
+    const dBps = BigInt(10 * referrerBps);
+
+    if (dBps > MAX_U16) {
+      throw new Error('bps exceeds max u16');
+    }
+
+    const fee = amount.getDeciBps(amt, dBps);
+    const feeUnits = amount.units(fee);
+
+    return feeUnits;
+  }
+
+  getQuoteAmountIn64(
+    request: routes.RouteTransferRequest<N>,
+    amountString: string,
+  ) {
+    const decimals = request.source.decimals;
+    const amt = amount.parse(amountString, decimals);
+    const feeUnits = this.getFeeInBaseUnits(request, amountString);
+
+    if (feeUnits <= 0n) {
+      return amt.amount;
+    }
+
+    const amtUnits = amount.units(amt);
+    const remainingUnits = amtUnits - feeUnits;
+    const remaining = amount.fromBaseUnits(remainingUnits, decimals);
+
+    return remaining.amount;
+  }
+
+  async injectReferralInstructionsForSolana(
+    connection: Connection,
+    request: routes.RouteTransferRequest<N>,
+    instructionsFromMayanSwap: TransactionInstruction[],
+    sender: PublicKey,
+    originalAmount: string,
+  ) {
+    const { fromChain, source } = request;
+    const referralParams = this.getReferralParameters(request);
+    const { isV2 } = referralParams;
+    const referrerAddress = this.referrerAddress()?.solana;
+    const referralFee = this.getFeeInBaseUnits(request, originalAmount);
+
+    if (
+      !referrerAddress ||
+      !referralFee ||
+      fromChain.network !== 'Mainnet' ||
+      !isV2
+    ) {
+      return instructionsFromMayanSwap;
+    }
+
+    const instructions: TransactionInstruction[] = [];
+    const referrer = new PublicKey(referrerAddress);
+    const isSol = isNative(source.id.address);
+
+    if (isSol) {
+      instructions.push(
+        SystemProgram.transfer({
+          fromPubkey: sender,
+          toPubkey: referrer,
+          lamports: referralFee,
+        }),
+      );
+    } else {
+      const mint = new PublicKey(source.id.address.toString());
+
+      const tokenProgramId = await SolanaPlatform.getTokenProgramId(
+        connection,
+        mint,
+      );
+
+      const referrerAta = getAssociatedTokenAddressSync(
+        mint,
+        referrer,
+        true,
+        tokenProgramId,
+      );
+
+      const senderAta = getAssociatedTokenAddressSync(
+        mint,
+        sender,
+        true,
+        tokenProgramId,
+      );
+
+      const referrerAtaAccount = await connection.getAccountInfo(referrerAta);
+
+      if (!referrerAtaAccount) {
+        instructions.push(
+          createAssociatedTokenAccountIdempotentInstruction(
+            sender,
+            referrerAta,
+            referrer,
+            mint,
+            tokenProgramId,
+          ),
+        );
+      }
+
+      instructions.push(
+        createTransferInstruction(
+          senderAta,
+          referrerAta,
+          sender,
+          referralFee,
+          undefined,
+          tokenProgramId,
+        ),
+      );
+    }
+
+    instructions.push(...instructionsFromMayanSwap);
+
+    return instructions;
+  }
+
   protected async fetchQuote(
     request: routes.RouteTransferRequest<N>,
     params: Vp,
@@ -228,7 +376,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
     }
 
     const quoteParams: QuoteParams = {
-      amount: Number(params.amount),
+      amountIn64: this.getQuoteAmountIn64(request, params.amount),
       fromToken: this.toMayanAddress(request.source.id),
       toToken: this.toMayanAddress(request.destination.id),
       /* @ts-ignore */
@@ -237,9 +385,19 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
       toChain: toMayanChainName(toChain.network, toChain.chain),
       ...this.getDefaultOptions(),
       ...params.options,
-      ...this.getReferralParameters(request),
       slippageBps: 'auto',
     };
+
+    const referralParams = this.getReferralParameters(request);
+
+    // TODO remove this code once new referral code is ready
+    const isSolana = fromChain.chain === 'Solana'; // || fromChain.chain === 'Sui';
+
+    // TODO remove this code once new referral code is ready
+    if (!isSolana || (isSolana && !referralParams.isV2)) {
+      quoteParams.referrer = referralParams.referrer;
+      quoteParams.referrerBps = referralParams.referrerBps;
+    }
 
     const quoteOpts = {
       swift: this.protocols.includes('SWIFT'),
@@ -318,6 +476,15 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
     return quotes[0];
   }
 
+  getMinAmount(minAmountIn: string | number, decimals: number) {
+    try {
+      const minAmount = amount.parse(minAmountIn, decimals);
+      return minAmount;
+    } catch (e) {
+      return null;
+    }
+  }
+
   async quote(
     request: routes.RouteTransferRequest<N>,
     params: Vp,
@@ -359,8 +526,8 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
         params,
         sourceToken: {
           token: request.source.id,
-          amount: amount.parse(
-            amount.denoise(quote.effectiveAmountIn, quote.fromToken.decimals),
+          amount: amount.fromBaseUnits(
+            BigInt(quote.effectiveAmountIn64),
             quote.fromToken.decimals,
           ),
         },
@@ -397,13 +564,12 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
           // We parse this and return a standardized Wormhole SDK MinAmountError
 
           const minAmountIn = data?.data?.minAmountIn;
+          const minAmount = this.getMinAmount(
+            minAmountIn,
+            request.source.decimals,
+          );
 
-          if (typeof minAmountIn === 'number') {
-            const minAmount = amount.parse(
-              minAmountIn,
-              request.source.decimals,
-            );
-
+          if (minAmount) {
             return {
               success: false,
               error: new routes.MinAmountError(minAmount),
@@ -432,12 +598,16 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
     quote: Q,
     to: ChainAddress,
   ) {
+    const referralParams = this.getReferralParameters(request);
+    const { isV2 } = referralParams;
+    const referrerAddress = this.referrerAddress();
     const originAddress = signer.address();
     const destinationAddress = canonicalAddress(to);
 
     try {
       const rpc = await request.fromChain.getRpc();
       const txs: TransactionId[] = [];
+
       if (request.fromChain.chain === 'Solana') {
         const { instructions, signers, lookupTables } =
           await (this.isTestnetRequest(request)
@@ -445,7 +615,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
                 this.normalizeQuoteForTestnet(quote.details!),
                 originAddress,
                 destinationAddress,
-                this.referrerAddress(),
+                null,
                 rpc,
                 { allowSwapperOffCurve: true },
               )
@@ -453,17 +623,26 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
                 quote.details!,
                 originAddress,
                 destinationAddress,
-                this.referrerAddress(),
+                isV2 ? null : referrerAddress,
                 rpc,
                 { allowSwapperOffCurve: true },
               ));
 
+        const payerKey = new PublicKey(originAddress);
+
         const message = MessageV0.compile({
-          instructions,
+          instructions: await this.injectReferralInstructionsForSolana(
+            rpc,
+            request,
+            instructions,
+            payerKey,
+            quote.params.amount,
+          ),
           payerKey: new PublicKey(originAddress),
           recentBlockhash: '',
           addressLookupTableAccounts: lookupTables,
         });
+
         const txReqs = [
           new SolanaUnsignedTransaction(
             {
@@ -504,7 +683,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
               this.normalizeQuoteForTestnet(quote.details!),
               originAddress,
               destinationAddress,
-              this.referrerAddress(),
+              null,
               undefined,
               rpc,
             )
@@ -512,7 +691,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
               quote.details!,
               originAddress,
               destinationAddress,
-              this.referrerAddress(),
+              referrerAddress,
               undefined,
               rpc,
             ));
@@ -593,7 +772,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
               this.normalizeQuoteForTestnet(quote.details!),
               originAddress,
               destinationAddress,
-              this.referrerAddress(),
+              null,
               originAddress,
               Number(nativeChainId!),
               undefined,
@@ -603,7 +782,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
               quote.details!,
               originAddress,
               destinationAddress,
-              this.referrerAddress(),
+              referrerAddress,
               originAddress,
               Number(nativeChainId!),
               undefined,
@@ -722,15 +901,19 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
 
   getReferralParameters(
     request: routes.RouteTransferRequest<N>,
-  ): Pick<QuoteParams, 'referrerBps' | 'referrer'> {
-    const { referrers, getReferrerBps } = this.constructor as ReferrerParams<N>;
+  ): Pick<QuoteParams, 'referrerBps' | 'referrer'> & { isV2?: boolean } {
+    const { referrers, getReferrerBps, isV2 } = this
+      .constructor as ReferrerParams<N>;
+
+    // TODO fix this function to when fully migrated to v2 referral
     const isReferralEnabled =
       !!referrers?.Solana && typeof getReferrerBps === 'function';
 
     return isReferralEnabled
       ? {
-          referrer: referrers.Solana,
+          referrer: referrers.Solana, // Mayan referrer system expects solana
           referrerBps: getReferrerBps(request),
+          isV2,
         }
       : {};
   }
