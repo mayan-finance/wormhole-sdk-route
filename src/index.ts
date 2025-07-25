@@ -2,7 +2,6 @@ import {
   Quote as MayanQuote,
   QuoteParams,
   ReferrerAddresses,
-  addresses,
   createSwapFromSolanaInstructions,
   createSwapFromSuiMoveCalls,
   generateFetchQuoteUrl,
@@ -75,6 +74,7 @@ import {
   TransactionInstruction,
   VersionedTransaction,
 } from '@solana/web3.js';
+import { createTransactionRequest, getEvmContractAddress } from './evm/utils';
 
 export namespace MayanRoute {
   export type Options = {
@@ -111,7 +111,11 @@ type MayanProtocol =
 type ReferrerParams<N extends Network> = {
   getReferrerBps?: (request: routes.RouteTransferRequest<N>) => number;
   referrers?: Partial<Record<Chain, string>>;
-  isV2?: boolean;
+
+  // For temp feature flagging only
+  isNewSolanaReferralEnabled?: boolean; // To be removed eventually
+  isNewSuiReferralEnabled?: boolean; // To be removed eventually
+  isNewEvmReferralEnabled?: boolean; // To be removed eventually
 };
 
 class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
@@ -212,23 +216,49 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
       : getNativeContractAddress(tokenId.chain);
   }
 
+  // TODO remove function
+  // Temp for feature flagging purposes
+  isNewReferralEnabled(request: routes.RouteTransferRequest<N>) {
+    const referralParams = this.getReferralParameters(request);
+
+    const {
+      isNewSolanaReferralEnabled,
+      isNewEvmReferralEnabled,
+      isNewSuiReferralEnabled,
+    } = referralParams;
+
+    const { fromChain } = request;
+    const isSolana = fromChain.chain === 'Solana';
+    const isSui = fromChain.chain === 'Sui';
+    const isEvm = !isSolana && !isSui;
+
+    if (isSolana) {
+      return !!isNewSolanaReferralEnabled;
+    }
+
+    if (isSui) {
+      return !!isNewSuiReferralEnabled;
+    }
+
+    if (isEvm) {
+      return !!isNewEvmReferralEnabled;
+    }
+
+    return false;
+  }
+
   getFeeInBaseUnits(
     request: routes.RouteTransferRequest<N>,
     amountString: string,
   ) {
-    const { fromChain, source } = request;
-    const referralParams = this.getReferralParameters(request);
-    const { referrerBps, referrer, isV2 } = referralParams;
+    const isNewReferralEnabled = this.isNewReferralEnabled(request);
+    const { referrerBps, referrer } = this.getReferralParameters(request);
 
-    // TODO remove solana check when all chains are ready
-    const isSolana = fromChain.chain === 'Solana';
-
-    // TODO remove solana check when all chains are ready
-    if (!referrerBps || !referrer || !isSolana || !isV2) {
+    if (!referrerBps || !referrer || !isNewReferralEnabled) {
       return 0n;
     }
 
-    const amt = amount.parse(amountString, source.decimals);
+    const amt = amount.parse(amountString, request.source.decimals);
     const MAX_U16 = 65_535n;
     const dBps = BigInt(10 * referrerBps);
 
@@ -270,7 +300,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
   ) {
     const { fromChain, source } = request;
     const referralParams = this.getReferralParameters(request);
-    const { isV2 } = referralParams;
+    const { isNewSolanaReferralEnabled } = referralParams;
     const referrerAddress = this.referrerAddress()?.solana;
     const referralFee = this.getFeeInBaseUnits(request, originalAmount);
 
@@ -278,7 +308,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
       !referrerAddress ||
       !referralFee ||
       fromChain.network !== 'Mainnet' ||
-      !isV2
+      !isNewSolanaReferralEnabled
     ) {
       return instructionsFromMayanSwap;
     }
@@ -389,12 +419,10 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
     };
 
     const referralParams = this.getReferralParameters(request);
+    const isNewReferralEnabled = this.isNewReferralEnabled(request);
 
     // TODO remove this code once new referral code is ready
-    const isSolana = fromChain.chain === 'Solana'; // || fromChain.chain === 'Sui';
-
-    // TODO remove this code once new referral code is ready
-    if (!isSolana || (isSolana && !referralParams.isV2)) {
+    if (!isNewReferralEnabled) {
       quoteParams.referrer = referralParams.referrer;
       quoteParams.referrerBps = referralParams.referrerBps;
     }
@@ -598,15 +626,14 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
     quote: Q,
     to: ChainAddress,
   ) {
-    const referralParams = this.getReferralParameters(request);
-    const { isV2 } = referralParams;
-    const referrerAddress = this.referrerAddress();
-    const originAddress = signer.address();
-    const destinationAddress = canonicalAddress(to);
-
     try {
-      const rpc = await request.fromChain.getRpc();
+      const referrerAddress = this.referrerAddress();
+      const originAddress = signer.address();
+      const destinationAddress = canonicalAddress(to);
       const txs: TransactionId[] = [];
+      const rpc = await request.fromChain.getRpc();
+      const feeUnits = this.getFeeInBaseUnits(request, quote.params.amount);
+      const isNewReferralEnabled = this.isNewReferralEnabled(request);
 
       if (request.fromChain.chain === 'Solana') {
         const { instructions, signers, lookupTables } =
@@ -623,7 +650,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
                 quote.details!,
                 originAddress,
                 destinationAddress,
-                isV2 ? null : referrerAddress,
+                isNewReferralEnabled ? null : referrerAddress,
                 rpc,
                 { allowSwapperOffCurve: true },
               ));
@@ -691,10 +718,11 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
               quote.details!,
               originAddress,
               destinationAddress,
-              referrerAddress,
+              isNewReferralEnabled ? null : referrerAddress,
               undefined,
               rpc,
             ));
+
         const txReqs = [
           new SuiUnsignedTransaction(
             tx,
@@ -727,35 +755,46 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
         }
       } else {
         const txReqs: EvmUnsignedTransaction<N, EvmChains>[] = [];
+
         const nativeChainId = nativeChainIds.networkChainToNativeChainId.get(
           request.fromChain.network,
           request.fromChain.chain,
         );
 
-        if (!isNative(request.source.id.address)) {
-          const tokenContract = EvmPlatform.getTokenImplementation(
-            await request.fromChain.getRpc(),
-            this.toMayanAddress(request.source.id),
-          );
+        const tokenAddress = this.toMayanAddress(request.source.id);
+        const isNativeToken = isNative(request.source.id.address);
 
-          const contractAddress = addresses.MAYAN_FORWARDER_CONTRACT;
+        const contractAddress = getEvmContractAddress(
+          request.fromChain.network,
+          feeUnits,
+          isNewReferralEnabled,
+        );
+
+        const amountUnits = amount.units(
+          amount.parse(quote.params.amount, request.source.decimals),
+        );
+
+        if (!isNativeToken) {
+          const tokenContract = EvmPlatform.getTokenImplementation(
+            rpc,
+            tokenAddress,
+          );
 
           const allowance = await tokenContract.allowance(
             originAddress,
             contractAddress,
           );
 
-          const amt = amount.units(quote.sourceToken.amount);
-          if (allowance < amt) {
+          if (allowance < amountUnits) {
             const txReq = await tokenContract.approve.populateTransaction(
-              // mayan contract address,
               contractAddress,
-              amt,
+              amountUnits,
             );
+
             txReqs.push(
               new EvmUnsignedTransaction(
                 {
-                  from: signer.address(),
+                  from: originAddress,
                   chainId: nativeChainId as bigint,
                   ...txReq,
                 },
@@ -767,7 +806,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
           }
         }
 
-        const txReq = this.isTestnetRequest(request)
+        const mayanTxRequest = this.isTestnetRequest(request)
           ? getSwapFromEvmTxPayloadTestnet(
               this.normalizeQuoteForTestnet(quote.details!),
               originAddress,
@@ -782,20 +821,28 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
               quote.details!,
               originAddress,
               destinationAddress,
-              referrerAddress,
+              isNewReferralEnabled ? null : referrerAddress,
               originAddress,
               Number(nativeChainId!),
               undefined,
               undefined, // permit?
             );
 
+        const txReq = createTransactionRequest(
+          request.fromChain.network,
+          mayanTxRequest,
+          amountUnits,
+          feeUnits,
+          originAddress,
+          referrerAddress?.evm!,
+          tokenAddress,
+          isNativeToken,
+          isNewReferralEnabled,
+        );
+
         txReqs.push(
           new EvmUnsignedTransaction(
-            {
-              from: signer.address(),
-              chainId: nativeChainId,
-              ...txReq,
-            },
+            txReq,
             request.fromChain.network,
             request.fromChain.chain as EvmChains,
             'Execute Swap',
@@ -804,6 +851,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
 
         if (isSignAndSendSigner(signer)) {
           const txids = await signer.signAndSend(txReqs);
+
           txs.push(
             ...txids.map((txid) => ({
               chain: request.fromChain.chain,
@@ -899,11 +947,21 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
     };
   }
 
-  getReferralParameters(
-    request: routes.RouteTransferRequest<N>,
-  ): Pick<QuoteParams, 'referrerBps' | 'referrer'> & { isV2?: boolean } {
-    const { referrers, getReferrerBps, isV2 } = this
-      .constructor as ReferrerParams<N>;
+  getReferralParameters(request: routes.RouteTransferRequest<N>): Pick<
+    QuoteParams,
+    'referrerBps' | 'referrer'
+  > & {
+    isNewEvmReferralEnabled?: boolean;
+    isNewSolanaReferralEnabled?: boolean;
+    isNewSuiReferralEnabled?: boolean;
+  } {
+    const {
+      referrers,
+      getReferrerBps,
+      isNewEvmReferralEnabled,
+      isNewSolanaReferralEnabled,
+      isNewSuiReferralEnabled,
+    } = this.constructor as ReferrerParams<N>;
 
     // TODO fix this function to when fully migrated to v2 referral
     const isReferralEnabled =
@@ -913,7 +971,9 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
       ? {
           referrer: referrers.Solana, // Mayan referrer system expects solana
           referrerBps: getReferrerBps(request),
-          isV2,
+          isNewEvmReferralEnabled,
+          isNewSolanaReferralEnabled,
+          isNewSuiReferralEnabled,
         }
       : {};
   }
