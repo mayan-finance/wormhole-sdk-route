@@ -1,4 +1,5 @@
 import {
+  ComposableSuiMoveCallsOptions,
   Quote as MayanQuote,
   QuoteParams,
   ReferrerAddresses,
@@ -74,6 +75,8 @@ import {
   TransactionInstruction,
   VersionedTransaction,
 } from '@solana/web3.js';
+import { Transaction } from '@mysten/sui/transactions';
+import { SuiClient } from '@mysten/sui/client';
 import { createTransactionRequest, getEvmContractAddress } from './evm/utils';
 
 export namespace MayanRoute {
@@ -376,6 +379,68 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
     instructions.push(...instructionsFromMayanSwap);
 
     return instructions;
+  }
+
+  async injectReferralInstructionsForSui(
+    provider: SuiClient,
+    request: routes.RouteTransferRequest<N>,
+    sender: string,
+    originalAmount: string,
+  ) {
+    const { fromChain, source } = request;
+    const referralParams = this.getReferralParameters(request);
+    const { isNewSuiReferralEnabled } = referralParams;
+    const referrerAddress = this.referrerAddress()?.sui;
+    const referralFee = this.getFeeInBaseUnits(request, originalAmount);
+    const remainingAmount = this.getQuoteAmountIn64(request, originalAmount);
+
+    if (
+      !referrerAddress ||
+      !referralFee ||
+      fromChain.network !== 'Mainnet' ||
+      !isNewSuiReferralEnabled
+    ) {
+      return {};
+    }
+
+    const tx = new Transaction();
+    const token = source.id.address;
+    const isSui = isNative(token);
+    let primaryCoinObjectId;
+
+    if (isSui) {
+      primaryCoinObjectId = tx.gas;
+    } else {
+      const coinType = token.toString();
+
+      const [primaryCoin, ...mergeCoins] = await SuiPlatform.getCoins(
+        provider,
+        sender,
+        coinType,
+      );
+
+      if (!primaryCoin) {
+        throw new Error(`No coins of type ${coinType} found for ${sender}.`);
+      }
+
+      primaryCoinObjectId = tx.object(primaryCoin.coinObjectId);
+
+      if (mergeCoins.length > 0) {
+        tx.mergeCoins(
+          primaryCoinObjectId,
+          mergeCoins.map((coin) => tx.object(coin.coinObjectId)),
+        );
+      }
+    }
+
+    const [referralFeeCoin, remainingAmountCoin] = tx.splitCoins(
+      primaryCoinObjectId,
+      [referralFee, remainingAmount],
+    );
+
+    tx.transferObjects([referralFeeCoin], referrerAddress);
+
+    return { tx, remainingAmountCoin };
   }
 
   protected async fetchQuote(
@@ -705,6 +770,22 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
           );
         }
       } else if (request.fromChain.chain === 'Sui') {
+        const { tx: builtTransaction, remainingAmountCoin } =
+          await this.injectReferralInstructionsForSui(
+            rpc,
+            request,
+            originAddress,
+            quote.params.amount,
+          );
+
+        const options: ComposableSuiMoveCallsOptions | undefined =
+          builtTransaction
+            ? {
+                builtTransaction,
+                inputCoin: { result: remainingAmountCoin },
+              }
+            : undefined;
+
         const tx = await (this.isTestnetRequest(request)
           ? createSwapFromSuiMoveCallsTestnet(
               this.normalizeQuoteForTestnet(quote.details!),
@@ -721,6 +802,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
               isNewReferralEnabled ? null : referrerAddress,
               undefined,
               rpc,
+              options,
             ));
 
         const txReqs = [
