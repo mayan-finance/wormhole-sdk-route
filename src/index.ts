@@ -506,7 +506,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
 
   getMinAmount(minAmountIn: string | number, decimals: number) {
     try {
-      const minAmount = amount.parse(minAmountIn, decimals);
+      const minAmount = amount.parse(amount.denoise(minAmountIn, decimals), decimals);
       return minAmount;
     } catch (e) {
       return null;
