@@ -584,8 +584,7 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
 
           const minAmountIn = data?.data?.minAmountIn;
           if (typeof minAmountIn === "number") {
-            const trimmed = parseFloat(minAmountIn.toFixed(request.source.decimals));
-            const minAmount = amount.parse(trimmed, request.source.decimals);
+            const minAmount = amount.parse(amount.denoise(minAmountIn, request.source.decimals), request.source.decimals);
 
             return {
               success: false,
