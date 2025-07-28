@@ -504,6 +504,15 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
     return quotes[0];
   }
 
+  getMinAmount(minAmountIn: string | number, decimals: number) {
+    try {
+      const minAmount = amount.parse(amount.denoise(minAmountIn, decimals), decimals);
+      return minAmount;
+    } catch (e) {
+      return null;
+    }
+  }
+
   async quote(
     request: routes.RouteTransferRequest<N>,
     params: Vp,
@@ -583,9 +592,12 @@ class MayanRouteBase<N extends Network> extends routes.AutomaticRoute<
           // We parse this and return a standardized Wormhole SDK MinAmountError
 
           const minAmountIn = data?.data?.minAmountIn;
-          if (typeof minAmountIn === "number") {
-            const minAmount = amount.parse(amount.denoise(minAmountIn, request.source.decimals), request.source.decimals);
+          const minAmount = this.getMinAmount(
+            minAmountIn,
+            request.source.decimals,
+          );
 
+          if (minAmount) {
             return {
               success: false,
               error: new routes.MinAmountError(minAmount),
