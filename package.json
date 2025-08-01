@@ -1,6 +1,6 @@
 {
   "name": "@mayanfinance/wormhole-sdk-route",
-  "version": "1.25.0",
+  "version": "1.26.0",
   "license": "Apache-2.0",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -32,7 +32,7 @@
     "example:swap": "npx tsx examples/swap.ts"
   },
   "dependencies": {
-    "@mayanfinance/swap-sdk": "10.9.2",
+    "@mayanfinance/swap-sdk": "10.9.3",
     "@testnet-mayan/swap-sdk": "^1.2.0",
     "axios": "^1.10.0"
   },
